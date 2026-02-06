@@ -11,7 +11,7 @@
 
 <meta name="author" content="Anon For Peer Review" />
 
-<meta name="date" content="2026-01-30" />
+<meta name="date" content="2026-02-06" />
 
 <title>analysis_vanuatu_3pp.R</title>
 
@@ -353,7 +353,7 @@ display: none;
 
 <h1 class="title toc-ignore">analysis_vanuatu_3pp.R</h1>
 <h4 class="author">Anon For Peer Review</h4>
-<h4 class="date">2026-01-30</h4>
+<h4 class="date">2026-02-06</h4>
 
 </div>
 
@@ -382,7 +382,6 @@ d2$NeutEmptyNum &lt;- ifelse(d2$NeutGot == &quot;Empty&quot;, 1, 0)
 d2$NeutGoodNum &lt;- ifelse(d2$NeutGot == &quot;Good&quot;, 1, 0)
 
 behaviours &lt;- c(&quot;AntiPun&quot;, &quot;NeutPun&quot;, &quot;AntiEmpty&quot;, &quot;NeutEmpty&quot;, &quot;AntiGood&quot;, &quot;NeutGood&quot;)
-behavsOrder2 &lt;- c(&quot;AntiPun&quot;, &quot;AntiEmpty&quot;, &quot;AntiGood&quot;, &quot;NeutPun&quot;, &quot;NeutEmpty&quot;, &quot;NeutGood&quot;)
 niceGreen &lt;- &quot;#009600FF&quot;
 s &lt;- seq(4.5,9.5,by=1)
 critval &lt;- qnorm(0.975)
@@ -603,30 +602,28 @@ results</code></pre>
 
 ######################################### Makes main model table
 
+# Center age variable
 meanAge &lt;- mean(d2$Age)
 d2$AgeCentred &lt;- d2$Age - meanAge
 
-mods &lt;- c()
-mods2 &lt;- c()
-pVals &lt;- c()
-coefs &lt;- c()
-coefAndPValTab &lt;- c()
-nothing &lt;- lapply( behavsOrder2, function(beh) {
-  cat(&quot;\n\n&quot;,beh,&quot;\n&quot;)
-  mods[[beh]] &lt;&lt;- glm(as.formula(paste(beh,&quot;~Condition+Cost+Sex+AgeCentred&quot;)), data=d2, family=&quot;binomial&quot;)
-  printCoefmat(summary(mods[[beh]])$coefficients)
-  mods2[[beh]] &lt;&lt;- update(mods[[beh]], . ~ . + Condition:AgeCentred + Sex:AgeCentred )
-  #NB adding the three-way interaction changes little
-  printCoefmat(summary(mods2[[beh]])$coefficients)
-  print(anova(mods[[beh]],mods2[[beh]],test=&quot;Chisq&quot;)[5])
+# Fit all models and store in lists
+mods &lt;- list()
+mods2 &lt;- list()
+for(beh in behaviours) {
+  cat(&quot;\n\n&quot;, beh, &quot;\n&quot;)
   
-  pVals[[beh]] &lt;&lt;- c(coef(summary(mods[[beh]]))[1:5,4],
-    anova(mods[[beh]],mods2[[beh]],test=&quot;Chisq&quot;)$&quot;Pr(&gt;Chi)&quot;[2],
-    coef(summary(mods2[[beh]]))[6:7,4]
-  )
-  coefs[[beh]] &lt;&lt;- c(coef(summary(mods[[beh]]))[1:5,1], NA, coef(summary(mods2[[beh]]))[6:7,1]) 
-  coefAndPValTab[[beh]] &lt;&lt;- cbind( coefs[[beh]], pVals[[beh]] )
-})</code></pre>
+  # Fit simple model
+  mods[[beh]] &lt;- glm(as.formula(paste(beh, &quot;~Condition+Cost+Sex+AgeCentred&quot;)), 
+                     data=d2, family=&quot;binomial&quot;)
+  printCoefmat(summary(mods[[beh]])$coefficients)
+  
+  # Fit interaction model
+  mods2[[beh]] &lt;- update(mods[[beh]], . ~ . + Condition:AgeCentred + Sex:AgeCentred)
+  printCoefmat(summary(mods2[[beh]])$coefficients)
+  
+  # Test interaction terms
+  print(anova(mods[[beh]], mods2[[beh]], test=&quot;Chisq&quot;)[5])
+}</code></pre>
 <pre><code>## 
 ## 
 ##  AntiPun 
@@ -651,6 +648,30 @@ nothing &lt;- lapply( behavsOrder2, function(beh) {
 ##   Pr(&gt;Chi)
 ## 1         
 ## 2   0.1845
+## 
+## 
+##  NeutPun 
+##                  Estimate Std. Error z value  Pr(&gt;|z|)    
+## (Intercept)     -1.873630   0.290031 -6.4601 1.046e-10 ***
+## ConditionPublic -0.089878   0.367822 -0.2444    0.8070    
+## CostY           -0.435290   0.584925 -0.7442    0.4568    
+## SexM            -0.146275   0.361441 -0.4047    0.6857    
+## AgeCentred      -0.067367   0.117116 -0.5752    0.5651    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+##                             Estimate Std. Error z value  Pr(&gt;|z|)    
+## (Intercept)                -1.876248   0.290661 -6.4551 1.081e-10 ***
+## ConditionPublic            -0.097316   0.369611 -0.2633    0.7923    
+## CostY                      -0.440443   0.586297 -0.7512    0.4525    
+## SexM                       -0.139459   0.362134 -0.3851    0.7002    
+## AgeCentred                 -0.086739   0.185896 -0.4666    0.6408    
+## ConditionPublic:AgeCentred -0.056068   0.229395 -0.2444    0.8069    
+## SexM:AgeCentred             0.082782   0.223466  0.3704    0.7110    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+##   Pr(&gt;Chi)
+## 1         
+## 2   0.9044
 ## 
 ## 
 ##  AntiEmpty 
@@ -679,6 +700,30 @@ nothing &lt;- lapply( behavsOrder2, function(beh) {
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## 
+##  NeutEmpty 
+##                 Estimate Std. Error z value  Pr(&gt;|z|)    
+## (Intercept)     -2.25744    0.31515 -7.1630 7.894e-13 ***
+## ConditionPublic  0.60583    0.35048  1.7286  0.083880 .  
+## CostY            1.02185    0.40339  2.5331  0.011304 *  
+## SexM            -0.52754    0.35637 -1.4803  0.138790    
+## AgeCentred      -0.40736    0.13628 -2.9891  0.002798 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+##                            Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)                -2.24199    0.33528 -6.6868 2.28e-11 ***
+## ConditionPublic             0.49970    0.40536  1.2327  0.21768    
+## CostY                       1.03062    0.40516  2.5437  0.01097 *  
+## SexM                       -0.43845    0.41087 -1.0671  0.28592    
+## AgeCentred                 -0.38713    0.21836 -1.7729  0.07625 .  
+## ConditionPublic:AgeCentred -0.12838    0.25898 -0.4957  0.62010    
+## SexM:AgeCentred             0.10215    0.26012  0.3927  0.69454    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+##   Pr(&gt;Chi)
+## 1         
+## 2   0.8169
+## 
+## 
 ##  AntiGood 
 ##                  Estimate Std. Error z value  Pr(&gt;|z|)    
 ## (Intercept)     -1.083869   0.223365 -4.8525 1.219e-06 ***
@@ -705,54 +750,6 @@ nothing &lt;- lapply( behavsOrder2, function(beh) {
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## 
-##  NeutPun 
-##                  Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)     -1.873630   0.290031 -6.4601 1.046e-10 ***
-## ConditionPublic -0.089878   0.367822 -0.2444    0.8070    
-## CostY           -0.435290   0.584925 -0.7442    0.4568    
-## SexM            -0.146275   0.361441 -0.4047    0.6857    
-## AgeCentred      -0.067367   0.117116 -0.5752    0.5651    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-##                             Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)                -1.876248   0.290661 -6.4551 1.081e-10 ***
-## ConditionPublic            -0.097316   0.369611 -0.2633    0.7923    
-## CostY                      -0.440443   0.586297 -0.7512    0.4525    
-## SexM                       -0.139459   0.362134 -0.3851    0.7002    
-## AgeCentred                 -0.086739   0.185896 -0.4666    0.6408    
-## ConditionPublic:AgeCentred -0.056068   0.229395 -0.2444    0.8069    
-## SexM:AgeCentred             0.082782   0.223466  0.3704    0.7110    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-##   Pr(&gt;Chi)
-## 1         
-## 2   0.9044
-## 
-## 
-##  NeutEmpty 
-##                 Estimate Std. Error z value  Pr(&gt;|z|)    
-## (Intercept)     -2.25744    0.31515 -7.1630 7.894e-13 ***
-## ConditionPublic  0.60583    0.35048  1.7286  0.083880 .  
-## CostY            1.02185    0.40339  2.5331  0.011304 *  
-## SexM            -0.52754    0.35637 -1.4803  0.138790    
-## AgeCentred      -0.40736    0.13628 -2.9891  0.002798 ** 
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-##                            Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept)                -2.24199    0.33528 -6.6868 2.28e-11 ***
-## ConditionPublic             0.49970    0.40536  1.2327  0.21768    
-## CostY                       1.03062    0.40516  2.5437  0.01097 *  
-## SexM                       -0.43845    0.41087 -1.0671  0.28592    
-## AgeCentred                 -0.38713    0.21836 -1.7729  0.07625 .  
-## ConditionPublic:AgeCentred -0.12838    0.25898 -0.4957  0.62010    
-## SexM:AgeCentred             0.10215    0.26012  0.3927  0.69454    
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-##   Pr(&gt;Chi)
-## 1         
-## 2   0.8169
-## 
-## 
 ##  NeutGood 
 ##                  Estimate Std. Error z value  Pr(&gt;|z|)    
 ## (Intercept)      1.180712   0.227538  5.1891 2.113e-07 ***
@@ -775,29 +772,168 @@ nothing &lt;- lapply( behavsOrder2, function(beh) {
 ##   Pr(&gt;Chi)
 ## 1         
 ## 2   0.4355</code></pre>
-<pre class="r"><code>tab &lt;- Reduce(function(f1, f2) cbind(f1, f2),coefAndPValTab)
-colnames(tab) &lt;- paste(rep(behavsOrder2,each=2),rep(c(&quot;C&quot;,&quot;P&quot;),6),sep=&quot;&quot;)
-round(tab,digits=3) # with the empty box model which we don&#39;t bother to report</code></pre>
-<pre><code>##                            AntiPunC AntiPunP AntiEmptyC AntiEmptyP AntiGoodC AntiGoodP NeutPunC NeutPunP NeutEmptyC NeutEmptyP NeutGoodC NeutGoodP
-## (Intercept)                   0.542    0.009     -2.095      0.000    -1.084     0.000   -1.874    0.000     -2.257      0.000     1.181     0.000
-## ConditionPublic              -0.713    0.005      0.028      0.933     0.738     0.004   -0.090    0.807      0.606      0.084    -0.328     0.230
-## CostY                        -0.906    0.026      2.014      0.000    -0.853     0.026   -0.435    0.457      1.022      0.011    -0.630     0.081
-## SexM                         -0.321    0.196     -0.061      0.855     0.376     0.141   -0.146    0.686     -0.528      0.139     0.396     0.149
-## AgeCentred                    0.346    0.000      0.028      0.805    -0.401     0.000   -0.067    0.565     -0.407      0.003     0.257     0.007
-##                                  NA    0.185         NA      0.077        NA     0.015       NA    0.904         NA      0.817        NA     0.436
-## ConditionPublic:AgeCentred    0.286    0.084      0.194      0.348    -0.355     0.042   -0.056    0.807     -0.128      0.620     0.173     0.342
-## SexM:AgeCentred               0.100    0.528      0.436      0.041    -0.372     0.031    0.083    0.711      0.102      0.695    -0.152     0.395</code></pre>
-<pre class="r"><code>round(tab[, -c(3,4,9,10)], digits=3)</code></pre>
-<pre><code>##                            AntiPunC AntiPunP AntiGoodC AntiGoodP NeutPunC NeutPunP NeutGoodC NeutGoodP
-## (Intercept)                   0.542    0.009    -1.084     0.000   -1.874    0.000     1.181     0.000
-## ConditionPublic              -0.713    0.005     0.738     0.004   -0.090    0.807    -0.328     0.230
-## CostY                        -0.906    0.026    -0.853     0.026   -0.435    0.457    -0.630     0.081
-## SexM                         -0.321    0.196     0.376     0.141   -0.146    0.686     0.396     0.149
-## AgeCentred                    0.346    0.000    -0.401     0.000   -0.067    0.565     0.257     0.007
-##                                  NA    0.185        NA     0.015       NA    0.904        NA     0.436
-## ConditionPublic:AgeCentred    0.286    0.084    -0.355     0.042   -0.056    0.807     0.173     0.342
-## SexM:AgeCentred               0.100    0.528    -0.372     0.031    0.083    0.711    -0.152     0.395</code></pre>
-<pre class="r"><code>######################## Spline model plot of public/private against age
+<pre class="r"><code># Function to create OR table
+create_OR_table &lt;- function(model_names, main_label) {
+  
+  results_list &lt;- list()
+  
+  for(beh in model_names) {
+    model_simple &lt;- mods[[beh]]  # Simple model for main effects
+    model_interact &lt;- mods2[[beh]]  # Interaction model for interactions
+    
+    # Get coefficients from SIMPLE model (rows 1-5)
+    coef_summary_simple &lt;- coef(summary(model_simple))
+    coefs_log_simple &lt;- coef_summary_simple[, &quot;Estimate&quot;]
+    pvals_simple &lt;- coef_summary_simple[, &quot;Pr(&gt;|z|)&quot;]
+    ci_log_simple &lt;- confint(model_simple)
+    
+    # Get coefficients from INTERACTION model (rows 7-8)
+    coef_summary_interact &lt;- coef(summary(model_interact))
+    coefs_log_interact &lt;- coef_summary_interact[, &quot;Estimate&quot;]
+    pvals_interact &lt;- coef_summary_interact[, &quot;Pr(&gt;|z|)&quot;]
+    ci_log_interact &lt;- confint(model_interact)
+    
+    # Convert to OR scale
+    OR_simple &lt;- exp(coefs_log_simple[1:5])
+    ci_lower_OR_simple &lt;- exp(ci_log_simple[1:5, 1])
+    ci_upper_OR_simple &lt;- exp(ci_log_simple[1:5, 2])
+    
+    OR_interact &lt;- exp(coefs_log_interact[6:7])
+    ci_lower_OR_interact &lt;- exp(ci_log_interact[6:7, 1])
+    ci_upper_OR_interact &lt;- exp(ci_log_interact[6:7, 2])
+    
+    # Get interaction test p-value
+    interaction_test_p &lt;- anova(model_simple, model_interact, test=&quot;Chisq&quot;)$&quot;Pr(&gt;Chi)&quot;[2]
+    
+    # Store results in table structure
+    results_list[[beh]] &lt;- data.frame(
+      OR = c(OR_simple, NA, OR_interact),
+      CI_lower = c(ci_lower_OR_simple, NA, ci_lower_OR_interact),
+      CI_upper = c(ci_upper_OR_simple, NA, ci_upper_OR_interact),
+      P = c(pvals_simple, interaction_test_p, pvals_interact[6:7])
+    )
+  }
+  
+  # Combine into table
+  combined &lt;- cbind(results_list[[model_names[1]]], results_list[[model_names[2]]])
+  
+  # Set row names
+  rownames(combined) &lt;- c(
+    &quot;(Intercept)&quot;,
+    &quot;ConditionPublic&quot;, 
+    &quot;CostY&quot;,
+    &quot;SexM&quot;,
+    &quot;AgeCentred&quot;,
+    &quot;Interaction Test&quot;,
+    &quot;Condition:Age&quot;,
+    &quot;Sex:Age&quot;
+  )
+  
+  # Set column names
+  base_names &lt;- c(&quot;OR&quot;, &quot;CI_lower&quot;, &quot;CI_upper&quot;, &quot;P&quot;)
+  colnames(combined) &lt;- c(
+    paste(model_names[1], base_names, sep=&quot;_&quot;),
+    paste(model_names[2], base_names, sep=&quot;_&quot;)
+  )
+  
+  return(combined)
+}
+
+# Format helper function
+format_OR_with_CI &lt;- function(OR, ci_lower, ci_upper, p_val) {
+  if(is.na(OR)) {
+    return(list(OR_CI = &quot;---&quot;, P = sprintf(&quot;%.3f&quot;, p_val)))
+  }
+  OR_CI_string &lt;- sprintf(&quot;%.2f [%.2f, %.2f]&quot;, OR, ci_lower, ci_upper)
+  P_string &lt;- sprintf(&quot;%.3f&quot;, p_val)
+  return(list(OR_CI = OR_CI_string, P = P_string))
+}
+
+# === TABLE 1: PUNISHMENT ===
+
+pun_table &lt;- create_OR_table(c(&quot;AntiPun&quot;, &quot;NeutPun&quot;), &quot;Punishment&quot;)</code></pre>
+<pre><code>## Waiting for profiling to be done...
+## Waiting for profiling to be done...
+## Waiting for profiling to be done...
+## Waiting for profiling to be done...</code></pre>
+<pre class="r"><code>compact_pun &lt;- data.frame(
+  Variable = rownames(pun_table),
+  AntiPun_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, &quot;AntiPun_OR&quot;], 
+                     pun_table[i, &quot;AntiPun_CI_lower&quot;],
+                     pun_table[i, &quot;AntiPun_CI_upper&quot;],
+                     pun_table[i, &quot;AntiPun_P&quot;])$OR_CI),
+  AntiPun_P = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, &quot;AntiPun_OR&quot;], 
+                     pun_table[i, &quot;AntiPun_CI_lower&quot;],
+                     pun_table[i, &quot;AntiPun_CI_upper&quot;],
+                     pun_table[i, &quot;AntiPun_P&quot;])$P),
+  NeutPun_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, &quot;NeutPun_OR&quot;], 
+                     pun_table[i, &quot;NeutPun_CI_lower&quot;],
+                     pun_table[i, &quot;NeutPun_CI_upper&quot;],
+                     pun_table[i, &quot;NeutPun_P&quot;])$OR_CI),
+  NeutPun_P = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, &quot;NeutPun_OR&quot;], 
+                     pun_table[i, &quot;NeutPun_CI_lower&quot;],
+                     pun_table[i, &quot;NeutPun_CI_upper&quot;],
+                     pun_table[i, &quot;NeutPun_P&quot;])$P)
+)
+print(compact_pun, row.names = FALSE)</code></pre>
+<pre><code>##          Variable     AntiPun_OR_CI AntiPun_P     NeutPun_OR_CI NeutPun_P
+##       (Intercept) 1.72 [1.15, 2.60]     0.009 0.15 [0.08, 0.26]     0.000
+##   ConditionPublic 0.49 [0.30, 0.80]     0.005 0.91 [0.44, 1.87]     0.807
+##             CostY 0.40 [0.17, 0.87]     0.026 0.65 [0.18, 1.86]     0.457
+##              SexM 0.73 [0.44, 1.18]     0.196 0.86 [0.42, 1.75]     0.686
+##        AgeCentred 1.41 [1.21, 1.67]     0.000 0.93 [0.74, 1.17]     0.565
+##  Interaction Test               ---     0.185               ---     0.904
+##     Condition:Age 1.33 [0.97, 1.85]     0.084 0.95 [0.60, 1.48]     0.807
+##           Sex:Age 1.11 [0.81, 1.51]     0.528 1.09 [0.70, 1.69]     0.711</code></pre>
+<pre class="r"><code># === TABLE 2: REWARD ===
+
+good_table &lt;- create_OR_table(c(&quot;AntiGood&quot;, &quot;NeutGood&quot;), &quot;Reward&quot;)</code></pre>
+<pre><code>## Waiting for profiling to be done...
+## Waiting for profiling to be done...
+## Waiting for profiling to be done...
+## Waiting for profiling to be done...</code></pre>
+<pre class="r"><code>compact_good &lt;- data.frame(
+  Variable = rownames(good_table),
+  AntiGood_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, &quot;AntiGood_OR&quot;], 
+                     good_table[i, &quot;AntiGood_CI_lower&quot;],
+                     good_table[i, &quot;AntiGood_CI_upper&quot;],
+                     good_table[i, &quot;AntiGood_P&quot;])$OR_CI),
+  AntiGood_P = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, &quot;AntiGood_OR&quot;], 
+                     good_table[i, &quot;AntiGood_CI_lower&quot;],
+                     good_table[i, &quot;AntiGood_CI_upper&quot;],
+                     good_table[i, &quot;AntiGood_P&quot;])$P),
+  NeutGood_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, &quot;NeutGood_OR&quot;], 
+                     good_table[i, &quot;NeutGood_CI_lower&quot;],
+                     good_table[i, &quot;NeutGood_CI_upper&quot;],
+                     good_table[i, &quot;NeutGood_P&quot;])$OR_CI),
+  NeutGood_P = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, &quot;NeutGood_OR&quot;], 
+                     good_table[i, &quot;NeutGood_CI_lower&quot;],
+                     good_table[i, &quot;NeutGood_CI_upper&quot;],
+                     good_table[i, &quot;NeutGood_P&quot;])$P)
+)
+print(compact_good, row.names = FALSE)</code></pre>
+<pre><code>##          Variable    AntiGood_OR_CI AntiGood_P    NeutGood_OR_CI NeutGood_P
+##       (Intercept) 0.34 [0.22, 0.52]      0.000 3.26 [2.11, 5.16]      0.000
+##   ConditionPublic 2.09 [1.27, 3.48]      0.004 0.72 [0.42, 1.23]      0.230
+##             CostY 0.43 [0.20, 0.89]      0.026 0.53 [0.26, 1.09]      0.081
+##              SexM 1.46 [0.88, 2.41]      0.141 1.49 [0.87, 2.56]      0.149
+##        AgeCentred 0.67 [0.56, 0.79]      0.000 1.29 [1.08, 1.57]      0.007
+##  Interaction Test               ---      0.015               ---      0.436
+##     Condition:Age 0.70 [0.49, 0.98]      0.042 1.19 [0.83, 1.71]      0.342
+##           Sex:Age 0.69 [0.49, 0.96]      0.031 0.86 [0.60, 1.22]      0.395</code></pre>
+<pre class="r"><code># Write to CSV
+write.csv(compact_pun, &quot;OR_table_punishment.csv&quot;, row.names = FALSE)
+write.csv(compact_good, &quot;OR_table_reward.csv&quot;, row.names = FALSE)
+
+######################## Spline model plot of public/private against age
 
 png(&quot;splineFig2.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
 
@@ -926,6 +1062,14 @@ summary(mods2[[&quot;AntiGood&quot;]])</code></pre>
 ## AIC: 343.69
 ## 
 ## Number of Fisher Scoring iterations: 4</code></pre>
+<pre class="r"><code>coef_NeutPun &lt;- coef(AntiGoodMod3)[&quot;NeutPunY&quot;]
+ci_log &lt;- confint(AntiGoodMod3, parm = &quot;NeutPunY&quot;)</code></pre>
+<pre><code>## Waiting for profiling to be done...</code></pre>
+<pre class="r"><code>OR_NeutPun &lt;- exp(coef_NeutPun)
+ci_OR &lt;- exp(ci_log)
+cat(&quot;NeutPunY: OR =&quot;, round(OR_NeutPun, 2), 
+    &quot;[95% CI:&quot;, round(ci_OR[1], 2), &quot;,&quot;, round(ci_OR[2], 2), &quot;]\n&quot;)</code></pre>
+<pre><code>## NeutPunY: OR = 6.43 [95% CI: 2.89 , 15.12 ]</code></pre>
 <pre class="r"><code>anova(mods2[[&quot;AntiGood&quot;]],AntiGoodMod3,test=&quot;Chisq&quot;)</code></pre>
 <pre><code>## Analysis of Deviance Table
 ## 
@@ -1212,6 +1356,20 @@ cat(&quot;\n=== CROSS-CULTURAL COMPARISON TABLE (SWEDEN VS VANUATU) ===\n&quot;)
 ##  Antisocial In person          0.2128111       0.12119103        0.3463941        0.20833333     0.079359715       0.4270650
 ##     Neutral Anonymous          0.1347077       0.07016181        0.2431083        0.04166667     0.002178856       0.2311625
 ##     Neutral In person          0.1353617       0.06269821        0.2681462        0.04166667     0.002178856       0.2311625</code></pre>
+<pre class="r"><code>#####################################
+# To produce R Markdown for this file
+
+# Create custom CSS file
+# writeLines(&quot;.main-container {
+#  max-width: 1130px !important;
+# }&quot;, &quot;path to custom.css&quot;)
+
+# Render with custom CSS
+# rmarkdown::render(&quot;path to analysis_vanuatu_3pp.R&quot;, 
+#                  output_format = rmarkdown::html_document(
+#                    pandoc_args = c(&quot;--metadata&quot;, &quot;author=Anon For Peer Review&quot;),
+#                    css = &quot;path to custom.css&quot;
+#                  ))</code></pre>
 
 
 

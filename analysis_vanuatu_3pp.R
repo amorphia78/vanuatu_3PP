@@ -22,7 +22,6 @@ d2$NeutEmptyNum <- ifelse(d2$NeutGot == "Empty", 1, 0)
 d2$NeutGoodNum <- ifelse(d2$NeutGot == "Good", 1, 0)
 
 behaviours <- c("AntiPun", "NeutPun", "AntiEmpty", "NeutEmpty", "AntiGood", "NeutGood")
-behavsOrder2 <- c("AntiPun", "AntiEmpty", "AntiGood", "NeutPun", "NeutEmpty", "NeutGood")
 niceGreen <- "#009600FF"
 s <- seq(4.5,9.5,by=1)
 critval <- qnorm(0.975)
@@ -148,34 +147,165 @@ results
 
 ######################################### Makes main model table
 
+# Center age variable
 meanAge <- mean(d2$Age)
 d2$AgeCentred <- d2$Age - meanAge
 
-mods <- c()
-mods2 <- c()
-pVals <- c()
-coefs <- c()
-coefAndPValTab <- c()
-nothing <- lapply( behavsOrder2, function(beh) {
-  cat("\n\n",beh,"\n")
-  mods[[beh]] <<- glm(as.formula(paste(beh,"~Condition+Cost+Sex+AgeCentred")), data=d2, family="binomial")
-  printCoefmat(summary(mods[[beh]])$coefficients)
-  mods2[[beh]] <<- update(mods[[beh]], . ~ . + Condition:AgeCentred + Sex:AgeCentred )
-  #NB adding the three-way interaction changes little
-  printCoefmat(summary(mods2[[beh]])$coefficients)
-  print(anova(mods[[beh]],mods2[[beh]],test="Chisq")[5])
+# Fit all models and store in lists
+mods <- list()
+mods2 <- list()
+for(beh in behaviours) {
+  cat("\n\n", beh, "\n")
   
-  pVals[[beh]] <<- c(coef(summary(mods[[beh]]))[1:5,4],
-    anova(mods[[beh]],mods2[[beh]],test="Chisq")$"Pr(>Chi)"[2],
-    coef(summary(mods2[[beh]]))[6:7,4]
+  # Fit simple model
+  mods[[beh]] <- glm(as.formula(paste(beh, "~Condition+Cost+Sex+AgeCentred")), 
+                     data=d2, family="binomial")
+  printCoefmat(summary(mods[[beh]])$coefficients)
+  
+  # Fit interaction model
+  mods2[[beh]] <- update(mods[[beh]], . ~ . + Condition:AgeCentred + Sex:AgeCentred)
+  printCoefmat(summary(mods2[[beh]])$coefficients)
+  
+  # Test interaction terms
+  print(anova(mods[[beh]], mods2[[beh]], test="Chisq")[5])
+}
+
+# Function to create OR table
+create_OR_table <- function(model_names, main_label) {
+  
+  results_list <- list()
+  
+  for(beh in model_names) {
+    model_simple <- mods[[beh]]  # Simple model for main effects
+    model_interact <- mods2[[beh]]  # Interaction model for interactions
+    
+    # Get coefficients from SIMPLE model (rows 1-5)
+    coef_summary_simple <- coef(summary(model_simple))
+    coefs_log_simple <- coef_summary_simple[, "Estimate"]
+    pvals_simple <- coef_summary_simple[, "Pr(>|z|)"]
+    ci_log_simple <- confint(model_simple)
+    
+    # Get coefficients from INTERACTION model (rows 7-8)
+    coef_summary_interact <- coef(summary(model_interact))
+    coefs_log_interact <- coef_summary_interact[, "Estimate"]
+    pvals_interact <- coef_summary_interact[, "Pr(>|z|)"]
+    ci_log_interact <- confint(model_interact)
+    
+    # Convert to OR scale
+    OR_simple <- exp(coefs_log_simple[1:5])
+    ci_lower_OR_simple <- exp(ci_log_simple[1:5, 1])
+    ci_upper_OR_simple <- exp(ci_log_simple[1:5, 2])
+    
+    OR_interact <- exp(coefs_log_interact[6:7])
+    ci_lower_OR_interact <- exp(ci_log_interact[6:7, 1])
+    ci_upper_OR_interact <- exp(ci_log_interact[6:7, 2])
+    
+    # Get interaction test p-value
+    interaction_test_p <- anova(model_simple, model_interact, test="Chisq")$"Pr(>Chi)"[2]
+    
+    # Store results in table structure
+    results_list[[beh]] <- data.frame(
+      OR = c(OR_simple, NA, OR_interact),
+      CI_lower = c(ci_lower_OR_simple, NA, ci_lower_OR_interact),
+      CI_upper = c(ci_upper_OR_simple, NA, ci_upper_OR_interact),
+      P = c(pvals_simple, interaction_test_p, pvals_interact[6:7])
+    )
+  }
+  
+  # Combine into table
+  combined <- cbind(results_list[[model_names[1]]], results_list[[model_names[2]]])
+  
+  # Set row names
+  rownames(combined) <- c(
+    "(Intercept)",
+    "ConditionPublic", 
+    "CostY",
+    "SexM",
+    "AgeCentred",
+    "Interaction Test",
+    "Condition:Age",
+    "Sex:Age"
   )
-  coefs[[beh]] <<- c(coef(summary(mods[[beh]]))[1:5,1], NA, coef(summary(mods2[[beh]]))[6:7,1]) 
-  coefAndPValTab[[beh]] <<- cbind( coefs[[beh]], pVals[[beh]] )
-})
-tab <- Reduce(function(f1, f2) cbind(f1, f2),coefAndPValTab)
-colnames(tab) <- paste(rep(behavsOrder2,each=2),rep(c("C","P"),6),sep="")
-round(tab,digits=3) # with the empty box model which we don't report except to visualise in the figure
-round(tab[, -c(3,4,9,10)], digits=3)
+  
+  # Set column names
+  base_names <- c("OR", "CI_lower", "CI_upper", "P")
+  colnames(combined) <- c(
+    paste(model_names[1], base_names, sep="_"),
+    paste(model_names[2], base_names, sep="_")
+  )
+  
+  return(combined)
+}
+
+# Format helper function
+format_OR_with_CI <- function(OR, ci_lower, ci_upper, p_val) {
+  if(is.na(OR)) {
+    return(list(OR_CI = "---", P = sprintf("%.3f", p_val)))
+  }
+  OR_CI_string <- sprintf("%.2f [%.2f, %.2f]", OR, ci_lower, ci_upper)
+  P_string <- sprintf("%.3f", p_val)
+  return(list(OR_CI = OR_CI_string, P = P_string))
+}
+
+# === TABLE 1: PUNISHMENT ===
+
+pun_table <- create_OR_table(c("AntiPun", "NeutPun"), "Punishment")
+compact_pun <- data.frame(
+  Variable = rownames(pun_table),
+  AntiPun_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, "AntiPun_OR"], 
+                     pun_table[i, "AntiPun_CI_lower"],
+                     pun_table[i, "AntiPun_CI_upper"],
+                     pun_table[i, "AntiPun_P"])$OR_CI),
+  AntiPun_P = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, "AntiPun_OR"], 
+                     pun_table[i, "AntiPun_CI_lower"],
+                     pun_table[i, "AntiPun_CI_upper"],
+                     pun_table[i, "AntiPun_P"])$P),
+  NeutPun_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, "NeutPun_OR"], 
+                     pun_table[i, "NeutPun_CI_lower"],
+                     pun_table[i, "NeutPun_CI_upper"],
+                     pun_table[i, "NeutPun_P"])$OR_CI),
+  NeutPun_P = sapply(1:8, function(i) 
+    format_OR_with_CI(pun_table[i, "NeutPun_OR"], 
+                     pun_table[i, "NeutPun_CI_lower"],
+                     pun_table[i, "NeutPun_CI_upper"],
+                     pun_table[i, "NeutPun_P"])$P)
+)
+print(compact_pun, row.names = FALSE)
+
+# === TABLE 2: REWARD ===
+
+good_table <- create_OR_table(c("AntiGood", "NeutGood"), "Reward")
+compact_good <- data.frame(
+  Variable = rownames(good_table),
+  AntiGood_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, "AntiGood_OR"], 
+                     good_table[i, "AntiGood_CI_lower"],
+                     good_table[i, "AntiGood_CI_upper"],
+                     good_table[i, "AntiGood_P"])$OR_CI),
+  AntiGood_P = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, "AntiGood_OR"], 
+                     good_table[i, "AntiGood_CI_lower"],
+                     good_table[i, "AntiGood_CI_upper"],
+                     good_table[i, "AntiGood_P"])$P),
+  NeutGood_OR_CI = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, "NeutGood_OR"], 
+                     good_table[i, "NeutGood_CI_lower"],
+                     good_table[i, "NeutGood_CI_upper"],
+                     good_table[i, "NeutGood_P"])$OR_CI),
+  NeutGood_P = sapply(1:8, function(i) 
+    format_OR_with_CI(good_table[i, "NeutGood_OR"], 
+                     good_table[i, "NeutGood_CI_lower"],
+                     good_table[i, "NeutGood_CI_upper"],
+                     good_table[i, "NeutGood_P"])$P)
+)
+print(compact_good, row.names = FALSE)
+
+# Write to CSV
+write.csv(compact_pun, "OR_table_punishment.csv", row.names = FALSE)
+write.csv(compact_good, "OR_table_reward.csv", row.names = FALSE)
 
 ######################## Spline model plot of public/private against age
 
@@ -229,6 +359,12 @@ cat("Rewarded antisocial actor:",
 AntiGoodMod3 <- update(mods2[["AntiGood"]], . ~ . + NeutPun)
 summary(mods2[["AntiGood"]])
 summary(AntiGoodMod3)
+coef_NeutPun <- coef(AntiGoodMod3)["NeutPunY"]
+ci_log <- confint(AntiGoodMod3, parm = "NeutPunY")
+OR_NeutPun <- exp(coef_NeutPun)
+ci_OR <- exp(ci_log)
+cat("NeutPunY: OR =", round(OR_NeutPun, 2), 
+    "[95% CI:", round(ci_OR[1], 2), ",", round(ci_OR[2], 2), "]\n")
 anova(mods2[["AntiGood"]],AntiGoodMod3,test="Chisq")
 
 
@@ -428,5 +564,17 @@ cross_cultural_table <- data.frame(
 cat("\n=== CROSS-CULTURAL COMPARISON TABLE (SWEDEN VS VANUATU) ===\n")
 print(cross_cultural_table, row.names = FALSE)
 
+#####################################
+# To produce R Markdown for this file
 
+# Create custom CSS file
+# writeLines(".main-container {
+#  max-width: 1130px !important;
+# }", "path to custom.css")
 
+# Render with custom CSS
+# rmarkdown::render("path to analysis_vanuatu_3pp.R", 
+#                  output_format = rmarkdown::html_document(
+#                    pandoc_args = c("--metadata", "author=Anon For Peer Review"),
+#                    css = "path to custom.css"
+#                  ))
