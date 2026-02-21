@@ -183,12 +183,14 @@ create_OR_table <- function(model_names, main_label) {
     coef_summary_simple <- coef(summary(model_simple))
     coefs_log_simple <- coef_summary_simple[, "Estimate"]
     pvals_simple <- coef_summary_simple[, "Pr(>|z|)"]
+    zvals_simple <- coef_summary_simple[, "z value"]
     ci_log_simple <- confint(model_simple)
     
     # Get coefficients from INTERACTION model (rows 7-8)
     coef_summary_interact <- coef(summary(model_interact))
     coefs_log_interact <- coef_summary_interact[, "Estimate"]
     pvals_interact <- coef_summary_interact[, "Pr(>|z|)"]
+    zvals_interact <- coef_summary_interact[, "z value"]
     ci_log_interact <- confint(model_interact)
     
     # Convert to OR scale
@@ -208,6 +210,7 @@ create_OR_table <- function(model_names, main_label) {
       OR = c(OR_simple, NA, OR_interact),
       CI_lower = c(ci_lower_OR_simple, NA, ci_lower_OR_interact),
       CI_upper = c(ci_upper_OR_simple, NA, ci_upper_OR_interact),
+      Z = c(zvals_simple[1:5], NA, zvals_interact[6:7]),
       P = c(pvals_simple, interaction_test_p, pvals_interact[6:7])
     )
   }
@@ -217,18 +220,11 @@ create_OR_table <- function(model_names, main_label) {
   
   # Set row names
   rownames(combined) <- c(
-    "(Intercept)",
-    "ConditionPublic", 
-    "CostY",
-    "SexM",
-    "AgeCentred",
-    "Interaction Test",
-    "Condition:Age",
-    "Sex:Age"
+    "(Intercept)", "ConditionPublic", "CostY", "SexM", "AgeCentred",
+    "Interaction Test", "Condition:Age", "Sex:Age"
   )
   
-  # Set column names
-  base_names <- c("OR", "CI_lower", "CI_upper", "P")
+  base_names <- c("OR", "CI_lower", "CI_upper", "Z", "P")   # ADD Z HERE
   colnames(combined) <- c(
     paste(model_names[1], base_names, sep="_"),
     paste(model_names[2], base_names, sep="_")
@@ -238,68 +234,63 @@ create_OR_table <- function(model_names, main_label) {
 }
 
 # Format helper function
-format_OR_with_CI <- function(OR, ci_lower, ci_upper, p_val) {
+format_OR_with_CI <- function(OR, ci_lower, ci_upper, z_val, p_val) {
   if(is.na(OR)) {
-    return(list(OR_CI = "---", P = sprintf("%.3f", p_val)))
+    return(list(OR_CI = "---", Z = "---", P = sprintf("%.3f", p_val)))
   }
   OR_CI_string <- sprintf("%.2f [%.2f, %.2f]", OR, ci_lower, ci_upper)
+  Z_string <- sprintf("%.2f", z_val)
   P_string <- sprintf("%.3f", p_val)
-  return(list(OR_CI = OR_CI_string, P = P_string))
+  return(list(OR_CI = OR_CI_string, Z = Z_string, P = P_string))
 }
 
 # === TABLE 1: PUNISHMENT ===
 
 pun_table <- create_OR_table(c("AntiPun", "NeutPun"), "Punishment")
+pun_formatted <- lapply(1:8, function(i) {
+  list(
+    Anti = format_OR_with_CI(pun_table[i, "AntiPun_OR"], pun_table[i, "AntiPun_CI_lower"],
+                             pun_table[i, "AntiPun_CI_upper"], pun_table[i, "AntiPun_Z"],
+                             pun_table[i, "AntiPun_P"]),
+    Neut = format_OR_with_CI(pun_table[i, "NeutPun_OR"], pun_table[i, "NeutPun_CI_lower"],
+                             pun_table[i, "NeutPun_CI_upper"], pun_table[i, "NeutPun_Z"],
+                             pun_table[i, "NeutPun_P"])
+  )
+})
+
 compact_pun <- data.frame(
-  Variable = rownames(pun_table),
-  AntiPun_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, "AntiPun_OR"], 
-                     pun_table[i, "AntiPun_CI_lower"],
-                     pun_table[i, "AntiPun_CI_upper"],
-                     pun_table[i, "AntiPun_P"])$OR_CI),
-  AntiPun_P = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, "AntiPun_OR"], 
-                     pun_table[i, "AntiPun_CI_lower"],
-                     pun_table[i, "AntiPun_CI_upper"],
-                     pun_table[i, "AntiPun_P"])$P),
-  NeutPun_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, "NeutPun_OR"], 
-                     pun_table[i, "NeutPun_CI_lower"],
-                     pun_table[i, "NeutPun_CI_upper"],
-                     pun_table[i, "NeutPun_P"])$OR_CI),
-  NeutPun_P = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, "NeutPun_OR"], 
-                     pun_table[i, "NeutPun_CI_lower"],
-                     pun_table[i, "NeutPun_CI_upper"],
-                     pun_table[i, "NeutPun_P"])$P)
+  Variable    = rownames(pun_table),
+  AntiPun_OR_CI = sapply(pun_formatted, function(x) x$Anti$OR_CI),
+  AntiPun_Z     = sapply(pun_formatted, function(x) x$Anti$Z),
+  AntiPun_P     = sapply(pun_formatted, function(x) x$Anti$P),
+  NeutPun_OR_CI = sapply(pun_formatted, function(x) x$Neut$OR_CI),
+  NeutPun_Z     = sapply(pun_formatted, function(x) x$Neut$Z),
+  NeutPun_P     = sapply(pun_formatted, function(x) x$Neut$P)
 )
 print(compact_pun, row.names = FALSE)
 
 # === TABLE 2: REWARD ===
 
 good_table <- create_OR_table(c("AntiGood", "NeutGood"), "Reward")
+good_formatted <- lapply(1:8, function(i) {
+  list(
+    Anti = format_OR_with_CI(good_table[i, "AntiGood_OR"], good_table[i, "AntiGood_CI_lower"],
+                             good_table[i, "AntiGood_CI_upper"], good_table[i, "AntiGood_Z"],
+                             good_table[i, "AntiGood_P"]),
+    Neut = format_OR_with_CI(good_table[i, "NeutGood_OR"], good_table[i, "NeutGood_CI_lower"],
+                             good_table[i, "NeutGood_CI_upper"], good_table[i, "NeutGood_Z"],
+                             good_table[i, "NeutGood_P"])
+  )
+})
+
 compact_good <- data.frame(
-  Variable = rownames(good_table),
-  AntiGood_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, "AntiGood_OR"], 
-                     good_table[i, "AntiGood_CI_lower"],
-                     good_table[i, "AntiGood_CI_upper"],
-                     good_table[i, "AntiGood_P"])$OR_CI),
-  AntiGood_P = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, "AntiGood_OR"], 
-                     good_table[i, "AntiGood_CI_lower"],
-                     good_table[i, "AntiGood_CI_upper"],
-                     good_table[i, "AntiGood_P"])$P),
-  NeutGood_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, "NeutGood_OR"], 
-                     good_table[i, "NeutGood_CI_lower"],
-                     good_table[i, "NeutGood_CI_upper"],
-                     good_table[i, "NeutGood_P"])$OR_CI),
-  NeutGood_P = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, "NeutGood_OR"], 
-                     good_table[i, "NeutGood_CI_lower"],
-                     good_table[i, "NeutGood_CI_upper"],
-                     good_table[i, "NeutGood_P"])$P)
+  Variable      = rownames(good_table),
+  AntiGood_OR_CI = sapply(good_formatted, function(x) x$Anti$OR_CI),
+  AntiGood_Z     = sapply(good_formatted, function(x) x$Anti$Z),
+  AntiGood_P     = sapply(good_formatted, function(x) x$Anti$P),
+  NeutGood_OR_CI = sapply(good_formatted, function(x) x$Neut$OR_CI),
+  NeutGood_Z     = sapply(good_formatted, function(x) x$Neut$Z),
+  NeutGood_P     = sapply(good_formatted, function(x) x$Neut$P)
 )
 print(compact_good, row.names = FALSE)
 
