@@ -11,7 +11,7 @@
 
 <meta name="author" content="Anon For Peer Review" />
 
-<meta name="date" content="2026-02-06" />
+<meta name="date" content="2026-02-21" />
 
 <title>analysis_vanuatu_3pp.R</title>
 
@@ -353,7 +353,7 @@ display: none;
 
 <h1 class="title toc-ignore">analysis_vanuatu_3pp.R</h1>
 <h4 class="author">Anon For Peer Review</h4>
-<h4 class="date">2026-02-06</h4>
+<h4 class="date">2026-02-21</h4>
 
 </div>
 
@@ -785,12 +785,14 @@ create_OR_table &lt;- function(model_names, main_label) {
     coef_summary_simple &lt;- coef(summary(model_simple))
     coefs_log_simple &lt;- coef_summary_simple[, &quot;Estimate&quot;]
     pvals_simple &lt;- coef_summary_simple[, &quot;Pr(&gt;|z|)&quot;]
+    zvals_simple &lt;- coef_summary_simple[, &quot;z value&quot;]
     ci_log_simple &lt;- confint(model_simple)
     
     # Get coefficients from INTERACTION model (rows 7-8)
     coef_summary_interact &lt;- coef(summary(model_interact))
     coefs_log_interact &lt;- coef_summary_interact[, &quot;Estimate&quot;]
     pvals_interact &lt;- coef_summary_interact[, &quot;Pr(&gt;|z|)&quot;]
+    zvals_interact &lt;- coef_summary_interact[, &quot;z value&quot;]
     ci_log_interact &lt;- confint(model_interact)
     
     # Convert to OR scale
@@ -810,6 +812,7 @@ create_OR_table &lt;- function(model_names, main_label) {
       OR = c(OR_simple, NA, OR_interact),
       CI_lower = c(ci_lower_OR_simple, NA, ci_lower_OR_interact),
       CI_upper = c(ci_upper_OR_simple, NA, ci_upper_OR_interact),
+      Z = c(zvals_simple[1:5], NA, zvals_interact[6:7]),
       P = c(pvals_simple, interaction_test_p, pvals_interact[6:7])
     )
   }
@@ -819,18 +822,11 @@ create_OR_table &lt;- function(model_names, main_label) {
   
   # Set row names
   rownames(combined) &lt;- c(
-    &quot;(Intercept)&quot;,
-    &quot;ConditionPublic&quot;, 
-    &quot;CostY&quot;,
-    &quot;SexM&quot;,
-    &quot;AgeCentred&quot;,
-    &quot;Interaction Test&quot;,
-    &quot;Condition:Age&quot;,
-    &quot;Sex:Age&quot;
+    &quot;(Intercept)&quot;, &quot;ConditionPublic&quot;, &quot;CostY&quot;, &quot;SexM&quot;, &quot;AgeCentred&quot;,
+    &quot;Interaction Test&quot;, &quot;Condition:Age&quot;, &quot;Sex:Age&quot;
   )
   
-  # Set column names
-  base_names &lt;- c(&quot;OR&quot;, &quot;CI_lower&quot;, &quot;CI_upper&quot;, &quot;P&quot;)
+  base_names &lt;- c(&quot;OR&quot;, &quot;CI_lower&quot;, &quot;CI_upper&quot;, &quot;Z&quot;, &quot;P&quot;)   # ADD Z HERE
   colnames(combined) &lt;- c(
     paste(model_names[1], base_names, sep=&quot;_&quot;),
     paste(model_names[2], base_names, sep=&quot;_&quot;)
@@ -840,13 +836,14 @@ create_OR_table &lt;- function(model_names, main_label) {
 }
 
 # Format helper function
-format_OR_with_CI &lt;- function(OR, ci_lower, ci_upper, p_val) {
+format_OR_with_CI &lt;- function(OR, ci_lower, ci_upper, z_val, p_val) {
   if(is.na(OR)) {
-    return(list(OR_CI = &quot;---&quot;, P = sprintf(&quot;%.3f&quot;, p_val)))
+    return(list(OR_CI = &quot;---&quot;, Z = &quot;---&quot;, P = sprintf(&quot;%.3f&quot;, p_val)))
   }
   OR_CI_string &lt;- sprintf(&quot;%.2f [%.2f, %.2f]&quot;, OR, ci_lower, ci_upper)
+  Z_string &lt;- sprintf(&quot;%.2f&quot;, z_val)
   P_string &lt;- sprintf(&quot;%.3f&quot;, p_val)
-  return(list(OR_CI = OR_CI_string, P = P_string))
+  return(list(OR_CI = OR_CI_string, Z = Z_string, P = P_string))
 }
 
 # === TABLE 1: PUNISHMENT ===
@@ -856,39 +853,36 @@ pun_table &lt;- create_OR_table(c(&quot;AntiPun&quot;, &quot;NeutPun&quot;), &qu
 ## Waiting for profiling to be done...
 ## Waiting for profiling to be done...
 ## Waiting for profiling to be done...</code></pre>
-<pre class="r"><code>compact_pun &lt;- data.frame(
-  Variable = rownames(pun_table),
-  AntiPun_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, &quot;AntiPun_OR&quot;], 
-                     pun_table[i, &quot;AntiPun_CI_lower&quot;],
-                     pun_table[i, &quot;AntiPun_CI_upper&quot;],
-                     pun_table[i, &quot;AntiPun_P&quot;])$OR_CI),
-  AntiPun_P = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, &quot;AntiPun_OR&quot;], 
-                     pun_table[i, &quot;AntiPun_CI_lower&quot;],
-                     pun_table[i, &quot;AntiPun_CI_upper&quot;],
-                     pun_table[i, &quot;AntiPun_P&quot;])$P),
-  NeutPun_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, &quot;NeutPun_OR&quot;], 
-                     pun_table[i, &quot;NeutPun_CI_lower&quot;],
-                     pun_table[i, &quot;NeutPun_CI_upper&quot;],
-                     pun_table[i, &quot;NeutPun_P&quot;])$OR_CI),
-  NeutPun_P = sapply(1:8, function(i) 
-    format_OR_with_CI(pun_table[i, &quot;NeutPun_OR&quot;], 
-                     pun_table[i, &quot;NeutPun_CI_lower&quot;],
-                     pun_table[i, &quot;NeutPun_CI_upper&quot;],
-                     pun_table[i, &quot;NeutPun_P&quot;])$P)
+<pre class="r"><code>pun_formatted &lt;- lapply(1:8, function(i) {
+  list(
+    Anti = format_OR_with_CI(pun_table[i, &quot;AntiPun_OR&quot;], pun_table[i, &quot;AntiPun_CI_lower&quot;],
+                             pun_table[i, &quot;AntiPun_CI_upper&quot;], pun_table[i, &quot;AntiPun_Z&quot;],
+                             pun_table[i, &quot;AntiPun_P&quot;]),
+    Neut = format_OR_with_CI(pun_table[i, &quot;NeutPun_OR&quot;], pun_table[i, &quot;NeutPun_CI_lower&quot;],
+                             pun_table[i, &quot;NeutPun_CI_upper&quot;], pun_table[i, &quot;NeutPun_Z&quot;],
+                             pun_table[i, &quot;NeutPun_P&quot;])
+  )
+})
+
+compact_pun &lt;- data.frame(
+  Variable    = rownames(pun_table),
+  AntiPun_OR_CI = sapply(pun_formatted, function(x) x$Anti$OR_CI),
+  AntiPun_Z     = sapply(pun_formatted, function(x) x$Anti$Z),
+  AntiPun_P     = sapply(pun_formatted, function(x) x$Anti$P),
+  NeutPun_OR_CI = sapply(pun_formatted, function(x) x$Neut$OR_CI),
+  NeutPun_Z     = sapply(pun_formatted, function(x) x$Neut$Z),
+  NeutPun_P     = sapply(pun_formatted, function(x) x$Neut$P)
 )
 print(compact_pun, row.names = FALSE)</code></pre>
-<pre><code>##          Variable     AntiPun_OR_CI AntiPun_P     NeutPun_OR_CI NeutPun_P
-##       (Intercept) 1.72 [1.15, 2.60]     0.009 0.15 [0.08, 0.26]     0.000
-##   ConditionPublic 0.49 [0.30, 0.80]     0.005 0.91 [0.44, 1.87]     0.807
-##             CostY 0.40 [0.17, 0.87]     0.026 0.65 [0.18, 1.86]     0.457
-##              SexM 0.73 [0.44, 1.18]     0.196 0.86 [0.42, 1.75]     0.686
-##        AgeCentred 1.41 [1.21, 1.67]     0.000 0.93 [0.74, 1.17]     0.565
-##  Interaction Test               ---     0.185               ---     0.904
-##     Condition:Age 1.33 [0.97, 1.85]     0.084 0.95 [0.60, 1.48]     0.807
-##           Sex:Age 1.11 [0.81, 1.51]     0.528 1.09 [0.70, 1.69]     0.711</code></pre>
+<pre><code>##          Variable     AntiPun_OR_CI AntiPun_Z AntiPun_P     NeutPun_OR_CI NeutPun_Z NeutPun_P
+##       (Intercept) 1.72 [1.15, 2.60]      2.62     0.009 0.15 [0.08, 0.26]     -6.46     0.000
+##   ConditionPublic 0.49 [0.30, 0.80]     -2.83     0.005 0.91 [0.44, 1.87]     -0.24     0.807
+##             CostY 0.40 [0.17, 0.87]     -2.22     0.026 0.65 [0.18, 1.86]     -0.74     0.457
+##              SexM 0.73 [0.44, 1.18]     -1.29     0.196 0.86 [0.42, 1.75]     -0.40     0.686
+##        AgeCentred 1.41 [1.21, 1.67]      4.18     0.000 0.93 [0.74, 1.17]     -0.58     0.565
+##  Interaction Test               ---       ---     0.185               ---       ---     0.904
+##     Condition:Age 1.33 [0.97, 1.85]      1.73     0.084 0.95 [0.60, 1.48]     -0.24     0.807
+##           Sex:Age 1.11 [0.81, 1.51]      0.63     0.528 1.09 [0.70, 1.69]      0.37     0.711</code></pre>
 <pre class="r"><code># === TABLE 2: REWARD ===
 
 good_table &lt;- create_OR_table(c(&quot;AntiGood&quot;, &quot;NeutGood&quot;), &quot;Reward&quot;)</code></pre>
@@ -896,39 +890,36 @@ good_table &lt;- create_OR_table(c(&quot;AntiGood&quot;, &quot;NeutGood&quot;), 
 ## Waiting for profiling to be done...
 ## Waiting for profiling to be done...
 ## Waiting for profiling to be done...</code></pre>
-<pre class="r"><code>compact_good &lt;- data.frame(
-  Variable = rownames(good_table),
-  AntiGood_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, &quot;AntiGood_OR&quot;], 
-                     good_table[i, &quot;AntiGood_CI_lower&quot;],
-                     good_table[i, &quot;AntiGood_CI_upper&quot;],
-                     good_table[i, &quot;AntiGood_P&quot;])$OR_CI),
-  AntiGood_P = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, &quot;AntiGood_OR&quot;], 
-                     good_table[i, &quot;AntiGood_CI_lower&quot;],
-                     good_table[i, &quot;AntiGood_CI_upper&quot;],
-                     good_table[i, &quot;AntiGood_P&quot;])$P),
-  NeutGood_OR_CI = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, &quot;NeutGood_OR&quot;], 
-                     good_table[i, &quot;NeutGood_CI_lower&quot;],
-                     good_table[i, &quot;NeutGood_CI_upper&quot;],
-                     good_table[i, &quot;NeutGood_P&quot;])$OR_CI),
-  NeutGood_P = sapply(1:8, function(i) 
-    format_OR_with_CI(good_table[i, &quot;NeutGood_OR&quot;], 
-                     good_table[i, &quot;NeutGood_CI_lower&quot;],
-                     good_table[i, &quot;NeutGood_CI_upper&quot;],
-                     good_table[i, &quot;NeutGood_P&quot;])$P)
+<pre class="r"><code>good_formatted &lt;- lapply(1:8, function(i) {
+  list(
+    Anti = format_OR_with_CI(good_table[i, &quot;AntiGood_OR&quot;], good_table[i, &quot;AntiGood_CI_lower&quot;],
+                             good_table[i, &quot;AntiGood_CI_upper&quot;], good_table[i, &quot;AntiGood_Z&quot;],
+                             good_table[i, &quot;AntiGood_P&quot;]),
+    Neut = format_OR_with_CI(good_table[i, &quot;NeutGood_OR&quot;], good_table[i, &quot;NeutGood_CI_lower&quot;],
+                             good_table[i, &quot;NeutGood_CI_upper&quot;], good_table[i, &quot;NeutGood_Z&quot;],
+                             good_table[i, &quot;NeutGood_P&quot;])
+  )
+})
+
+compact_good &lt;- data.frame(
+  Variable      = rownames(good_table),
+  AntiGood_OR_CI = sapply(good_formatted, function(x) x$Anti$OR_CI),
+  AntiGood_Z     = sapply(good_formatted, function(x) x$Anti$Z),
+  AntiGood_P     = sapply(good_formatted, function(x) x$Anti$P),
+  NeutGood_OR_CI = sapply(good_formatted, function(x) x$Neut$OR_CI),
+  NeutGood_Z     = sapply(good_formatted, function(x) x$Neut$Z),
+  NeutGood_P     = sapply(good_formatted, function(x) x$Neut$P)
 )
 print(compact_good, row.names = FALSE)</code></pre>
-<pre><code>##          Variable    AntiGood_OR_CI AntiGood_P    NeutGood_OR_CI NeutGood_P
-##       (Intercept) 0.34 [0.22, 0.52]      0.000 3.26 [2.11, 5.16]      0.000
-##   ConditionPublic 2.09 [1.27, 3.48]      0.004 0.72 [0.42, 1.23]      0.230
-##             CostY 0.43 [0.20, 0.89]      0.026 0.53 [0.26, 1.09]      0.081
-##              SexM 1.46 [0.88, 2.41]      0.141 1.49 [0.87, 2.56]      0.149
-##        AgeCentred 0.67 [0.56, 0.79]      0.000 1.29 [1.08, 1.57]      0.007
-##  Interaction Test               ---      0.015               ---      0.436
-##     Condition:Age 0.70 [0.49, 0.98]      0.042 1.19 [0.83, 1.71]      0.342
-##           Sex:Age 0.69 [0.49, 0.96]      0.031 0.86 [0.60, 1.22]      0.395</code></pre>
+<pre><code>##          Variable    AntiGood_OR_CI AntiGood_Z AntiGood_P    NeutGood_OR_CI NeutGood_Z NeutGood_P
+##       (Intercept) 0.34 [0.22, 0.52]      -4.85      0.000 3.26 [2.11, 5.16]       5.19      0.000
+##   ConditionPublic 2.09 [1.27, 3.48]       2.87      0.004 0.72 [0.42, 1.23]      -1.20      0.230
+##             CostY 0.43 [0.20, 0.89]      -2.22      0.026 0.53 [0.26, 1.09]      -1.75      0.081
+##              SexM 1.46 [0.88, 2.41]       1.47      0.141 1.49 [0.87, 2.56]       1.44      0.149
+##        AgeCentred 0.67 [0.56, 0.79]      -4.49      0.000 1.29 [1.08, 1.57]       2.71      0.007
+##  Interaction Test               ---        ---      0.015               ---        ---      0.436
+##     Condition:Age 0.70 [0.49, 0.98]      -2.03      0.042 1.19 [0.83, 1.71]       0.95      0.342
+##           Sex:Age 0.69 [0.49, 0.96]      -2.16      0.031 0.86 [0.60, 1.22]      -0.85      0.395</code></pre>
 <pre class="r"><code># Write to CSV
 write.csv(compact_pun, &quot;OR_table_punishment.csv&quot;, row.names = FALSE)
 write.csv(compact_good, &quot;OR_table_reward.csv&quot;, row.names = FALSE)
@@ -1356,6 +1347,65 @@ cat(&quot;\n=== CROSS-CULTURAL COMPARISON TABLE (SWEDEN VS VANUATU) ===\n&quot;)
 ##  Antisocial In person          0.2128111       0.12119103        0.3463941        0.20833333     0.079359715       0.4270650
 ##     Neutral Anonymous          0.1347077       0.07016181        0.2431083        0.04166667     0.002178856       0.2311625
 ##     Neutral In person          0.1353617       0.06269821        0.2681462        0.04166667     0.002178856       0.2311625</code></pre>
+<pre class="r"><code># Sensitivity power analysis for binomial GLMs — main effects only
+# Uses pwr package. Assumes p0 = 0.5 (zero intercept / balanced baseline).
+# Binary predictors: pwr.2p2n.test() with actual group sizes
+# Age (continuous): pwr.r.test(), OR per year via r-to-logistic conversion
+
+library(pwr)
+
+# Group sizes for binary predictors
+n_Condition1 &lt;- sum(d2$Condition == &quot;Private&quot;)
+n_Condition2 &lt;- sum(d2$Condition == &quot;Public&quot;)
+n_Cost1      &lt;- sum(d2$Cost == &quot;Y&quot;)
+n_Cost2      &lt;- sum(d2$Cost == &quot;N&quot;)
+n_Sex1       &lt;- sum(d2$Sex == &quot;M&quot;)
+n_Sex2       &lt;- sum(d2$Sex == &quot;F&quot;)
+n_total      &lt;- nrow(d2)
+age_sd       &lt;- sd(d2$Age)
+
+# ── Binary predictors ─────────────────────────────────────────────────────────
+# pwr.2p2n.test returns Cohen&#39;s h; convert to OR assuming p0 = 0.5
+
+binary_mde &lt;- function(n1, n2) {
+  h  &lt;- pwr.2p2n.test(n1 = n1, n2 = n2, sig.level = 0.05, power = 0.80)$h
+  p1 &lt;- sin(asin(sqrt(0.5)) + h / 2)^2
+  OR &lt;- p1 / (1 - p1)   # since p0 = 0.5, OR = (p1/(1-p1)) / 1
+  c(h = round(h, 3), p1 = round(p1, 3), OR = round(OR, 2))
+}
+
+cat(&quot;=== Minimum detectable effect at 80% power, alpha = 0.05, p0 = 0.5 ===\n\n&quot;)</code></pre>
+<pre><code>## === Minimum detectable effect at 80% power, alpha = 0.05, p0 = 0.5 ===</code></pre>
+<pre class="r"><code>cat(&quot;Condition (n =&quot;, n_Condition1, &quot;/&quot;, n_Condition2, &quot;):\n&quot;)</code></pre>
+<pre><code>## Condition (n = 175 / 128 ):</code></pre>
+<pre class="r"><code>print(binary_mde(n_Condition1, n_Condition2))</code></pre>
+<pre><code>##     h    p1    OR 
+## 0.326 0.660 1.940</code></pre>
+<pre class="r"><code>cat(&quot;\nCost (n =&quot;, n_Cost1, &quot;/&quot;, n_Cost2, &quot;):\n&quot;)</code></pre>
+<pre><code>## 
+## Cost (n = 45 / 258 ):</code></pre>
+<pre class="r"><code>print(binary_mde(n_Cost1, n_Cost2))</code></pre>
+<pre><code>##     h    p1    OR 
+## 0.453 0.719 2.550</code></pre>
+<pre class="r"><code>cat(&quot;\nSex (n =&quot;, n_Sex1, &quot;/&quot;, n_Sex2, &quot;):\n&quot;)</code></pre>
+<pre><code>## 
+## Sex (n = 148 / 155 ):</code></pre>
+<pre class="r"><code>print(binary_mde(n_Sex1, n_Sex2))</code></pre>
+<pre><code>##     h    p1    OR 
+## 0.322 0.658 1.930</code></pre>
+<pre class="r"><code># ── Age (continuous) ──────────────────────────────────────────────────────────
+# pwr.r.test returns minimum detectable correlation r
+# Convert to OR per SD via logistic approximation, then to OR per year
+
+r      &lt;- pwr.r.test(n = n_total, sig.level = 0.05, power = 0.80)$r
+OR_sd  &lt;- exp(r * pi / sqrt(3))          # OR per SD of age
+OR_yr  &lt;- OR_sd ^ (1 / age_sd)           # OR per year
+
+cat(&quot;\nAge (n =&quot;, n_total, &quot;):\n&quot;)</code></pre>
+<pre><code>## 
+## Age (n = 303 ):</code></pre>
+<pre class="r"><code>cat(&quot;OR per year =&quot;, round(OR_yr, 3), &quot;\n&quot;)</code></pre>
+<pre><code>## OR per year = 1.194</code></pre>
 <pre class="r"><code>#####################################
 # To produce R Markdown for this file
 
