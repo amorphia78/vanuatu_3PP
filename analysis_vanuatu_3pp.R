@@ -555,6 +555,55 @@ cross_cultural_table <- data.frame(
 cat("\n=== CROSS-CULTURAL COMPARISON TABLE (SWEDEN VS VANUATU) ===\n")
 print(cross_cultural_table, row.names = FALSE)
 
+# Sensitivity power analysis for binomial GLMs — main effects only
+# Uses pwr package. Assumes p0 = 0.5 (zero intercept / balanced baseline).
+# Binary predictors: pwr.2p2n.test() with actual group sizes
+# Age (continuous): pwr.r.test(), OR per year via r-to-logistic conversion
+
+library(pwr)
+
+# Group sizes for binary predictors
+n_Condition1 <- sum(d2$Condition == "Private")
+n_Condition2 <- sum(d2$Condition == "Public")
+n_Cost1      <- sum(d2$Cost == "Y")
+n_Cost2      <- sum(d2$Cost == "N")
+n_Sex1       <- sum(d2$Sex == "M")
+n_Sex2       <- sum(d2$Sex == "F")
+n_total      <- nrow(d2)
+age_sd       <- sd(d2$Age)
+
+# ── Binary predictors ─────────────────────────────────────────────────────────
+# pwr.2p2n.test returns Cohen's h; convert to OR assuming p0 = 0.5
+
+binary_mde <- function(n1, n2) {
+  h  <- pwr.2p2n.test(n1 = n1, n2 = n2, sig.level = 0.05, power = 0.80)$h
+  p1 <- sin(asin(sqrt(0.5)) + h / 2)^2
+  OR <- p1 / (1 - p1)   # since p0 = 0.5, OR = (p1/(1-p1)) / 1
+  c(h = round(h, 3), p1 = round(p1, 3), OR = round(OR, 2))
+}
+
+cat("=== Minimum detectable effect at 80% power, alpha = 0.05, p0 = 0.5 ===\n\n")
+
+cat("Condition (n =", n_Condition1, "/", n_Condition2, "):\n")
+print(binary_mde(n_Condition1, n_Condition2))
+
+cat("\nCost (n =", n_Cost1, "/", n_Cost2, "):\n")
+print(binary_mde(n_Cost1, n_Cost2))
+
+cat("\nSex (n =", n_Sex1, "/", n_Sex2, "):\n")
+print(binary_mde(n_Sex1, n_Sex2))
+
+# ── Age (continuous) ──────────────────────────────────────────────────────────
+# pwr.r.test returns minimum detectable correlation r
+# Convert to OR per SD via logistic approximation, then to OR per year
+
+r      <- pwr.r.test(n = n_total, sig.level = 0.05, power = 0.80)$r
+OR_sd  <- exp(r * pi / sqrt(3))          # OR per SD of age
+OR_yr  <- OR_sd ^ (1 / age_sd)           # OR per year
+
+cat("\nAge (n =", n_total, "):\n")
+cat("OR per year =", round(OR_yr, 3), "\n")
+
 #####################################
 # To produce R Markdown for this file
 
