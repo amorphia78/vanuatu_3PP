@@ -365,8 +365,17 @@ setwd_vanuatu_3pp()
 library(splines)
 library(sandwich)
 library(lmtest)
-
-d2 &lt;- read.table(&quot;data_vanuatu_3pp.tsv&quot;, sep=&quot;\t&quot;, fill=T, head=T, na.strings=&quot;*&quot;)
+library(marginaleffects)</code></pre>
+<pre><code>## Warning: package &#39;marginaleffects&#39; was built under R version 4.5.3</code></pre>
+<pre><code>## Please cite the software developers who make your work possible.
+## One package:             citation(&quot;package_name&quot;)
+## All project packages:    softbib::softbib()</code></pre>
+<pre><code>## 
+## Attaching package: &#39;marginaleffects&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:lme4&#39;:
+## 
+##     refit</code></pre>
+<pre class="r"><code>d2 &lt;- read.table(&quot;data_vanuatu_3pp.tsv&quot;, sep=&quot;\t&quot;, fill=T, head=T, na.strings=&quot;*&quot;)
 d2$AntiPun &lt;- as.factor(ifelse(d2$AntiGot == &quot;Bad&quot;, &quot;Y&quot;, &quot;N&quot;))
 d2$AntiEmpty &lt;- as.factor(ifelse(d2$AntiGot == &quot;Empty&quot;, &quot;Y&quot;, &quot;N&quot;))
 d2$AntiGood &lt;- as.factor(ifelse(d2$AntiGot == &quot;Good&quot;, &quot;Y&quot;, &quot;N&quot;))
@@ -529,54 +538,185 @@ punTabAge6Plus</code></pre>
 <pre class="r"><code>punMcNemar(d2Age6Plus)</code></pre>
 <pre><code>##     n antiOnly neutOnly       OR    ci95l    ci95u            p
 ## 1 206      119       21 10.72916 6.034734 19.07537 8.201245e-18</code></pre>
-<pre class="r"><code>########################################### Calculate allocation variable summary statistics with CIs
+<pre class="r"><code>########################################### Allocation figure (Figure 2, and its supplementary version)
 
-ageForTable &lt;- median(d2$Age)
-ageForTable</code></pre>
-<pre><code>## [1] 6.625</code></pre>
-<pre class="r"><code>results &lt;- lapply( behaviours, function(beh) {
-  modForPreds &lt;- glm(as.formula(paste(beh,&quot;~Condition+Cost+Age&quot;)), data=d2, family=&quot;binomial&quot;)
-  predVals &lt;- data.frame( Age = rep(ageForTable,4), Condition = c(&quot;Private&quot;,&quot;Public&quot;,&quot;Private&quot;,&quot;Public&quot;), Cost = c(&quot;N&quot;,&quot;N&quot;,&quot;Y&quot;,&quot;Y&quot;))
-  preds &lt;- predict(modForPreds, newdata = predVals, type = &quot;link&quot;, se.fit = TRUE)
-  upr &lt;- preds$fit + (critval * preds$se.fit)
-  lwr &lt;- preds$fit - (critval * preds$se.fit)
-  fit &lt;- preds$fit
-  fit2 &lt;- modForPreds$family$linkinv(fit)
-  upr2 &lt;- modForPreds$family$linkinv(upr)
-  lwr2 &lt;- modForPreds$family$linkinv(lwr)
-  data.frame( behav = beh, condition = predVals$Condition, cost = predVals$Cost, prop = fit2, ci95l = lwr2, ci95u = upr2 )
-})
-results &lt;- Reduce(function(f1, f2) rbind(f1, f2),results)
-results</code></pre>
-<pre><code>##        behav condition cost       prop      ci95l     ci95u
-## 1    AntiPun   Private    N 0.56465180 0.48092633 0.6448455
-## 2    AntiPun    Public    N 0.38602814 0.29664200 0.4838212
-## 3    AntiPun   Private    Y 0.34777110 0.19955698 0.5327937
-## 4    AntiPun    Public    Y 0.20538801 0.10509673 0.3626059
-## 11   NeutPun   Private    N 0.12824657 0.08313766 0.1926870
-## 21   NeutPun    Public    N 0.11792223 0.06932425 0.1935051
-## 31   NeutPun   Private    Y 0.08726222 0.03069058 0.2240126
-## 41   NeutPun    Public    Y 0.07993475 0.02754195 0.2104274
-## 12 AntiEmpty   Private    N 0.10565403 0.06667395 0.1634328
-## 22 AntiEmpty    Public    N 0.10830899 0.06444864 0.1763906
-## 32 AntiEmpty   Private    Y 0.47033502 0.30585192 0.6415241
-## 42 AntiEmpty    Public    Y 0.47726365 0.30942646 0.6503972
-## 13 NeutEmpty   Private    N 0.08794336 0.05305165 0.1423338
-## 23 NeutEmpty    Public    N 0.14901573 0.09404406 0.2280321
-## 33 NeutEmpty   Private    Y 0.21317752 0.11030877 0.3718791
-## 43 NeutEmpty    Public    Y 0.32977340 0.18784132 0.5114175
-## 14  AntiGood   Private    N 0.32095325 0.24904149 0.4025003
-## 24  AntiGood    Public    N 0.49958071 0.40251309 0.5966799
-## 34  AntiGood   Private    Y 0.16662265 0.08706549 0.2953571
-## 44  AntiGood    Public    Y 0.29691382 0.17237780 0.4612760
-## 15  NeutGood   Private    N 0.78017031 0.70719075 0.8390990
-## 25  NeutGood    Public    N 0.72154262 0.63006358 0.7976649
-## 35  NeutGood   Private    Y 0.65167715 0.48715270 0.7865476
-## 45  NeutGood    Public    Y 0.57734574 0.40978381 0.7288178</code></pre>
-<pre class="r"><code># Note that the graph corresponding to this is made in Excel from the above table.
-# R appears to have no convenient way to make nested-category x-axis labels of the type used.
+# Each allocation is modelled from the two experimental factors plus age, and
+# plotted at the median age. The figure gives each experimental factor its own
+# column so that a pair of bars carries only one factor. Predictions for a
+# column are therefore averaged over the levels of the other factor, weighted
+# by how participants divide between them: a predictive margin (Graubard &amp;
+# Korn, 1999, Biometrics 55:652-659). avg_predictions() performs that
+# averaging and its delta-method standard error on the probability scale; the
+# SE is moved to the logit scale before the interval is formed so that the
+# interval cannot fall outside (0,1).
 
-######################################### Makes main model table
+ageForFig &lt;- median(d2$Age)
+allocMods &lt;- lapply( behaviours, function(beh)
+  glm(as.formula(paste(beh,&quot;~Condition+Cost+Age&quot;)), data=d2, family=&quot;binomial&quot;) )
+names(allocMods) &lt;- behaviours
+
+marginalPred &lt;- function( model, splitVar, splitLevel, mergeVar, mergeWeights ) {
+  grid &lt;- data.frame( Age = rep(ageForFig, length(mergeWeights)) )
+  grid[[splitVar]] &lt;- splitLevel
+  grid[[mergeVar]] &lt;- names(mergeWeights)
+  grid$predWeight &lt;- as.vector(mergeWeights)
+  pred &lt;- avg_predictions( model, newdata = grid, by = splitVar, wts = &quot;predWeight&quot; )
+  seLogit &lt;- pred$std.error / ( pred$estimate * (1 - pred$estimate) )
+  data.frame( prop = pred$estimate,
+              ci95l = plogis( qlogis(pred$estimate) - critval*seLogit ),
+              ci95u = plogis( qlogis(pred$estimate) + critval*seLogit ) )
+}
+
+# Observed proportions for the same cells, shown alongside the fit in the
+# supplementary version of the figure. Note these pool over age, whereas the
+# fitted bars hold it at the median.
+rawPred &lt;- function( responses ) {
+  ci &lt;- prop.test( sum(responses == &quot;Y&quot;), length(responses) )$conf.int
+  data.frame( prop = mean(responses == &quot;Y&quot;), ci95l = ci[1], ci95u = ci[2] )
+}
+
+# One column per experimental factor, one row per allocation. Bars within a
+# row run antisocial agent then neutral, each split by the column&#39;s factor.
+allocColumns &lt;- list(
+  list( var = &quot;Cost&quot;, levels = c(&quot;N&quot;,&quot;Y&quot;), title = &quot;Economic cost&quot;,
+        tickLabels = c(&quot;Free&quot;,&quot;Econ. cost&quot;), tickCex = .8,
+        mergeVar = &quot;Condition&quot;, mergeWeights = table(d2$Condition) / nrow(d2) ),
+  list( var = &quot;Condition&quot;, levels = c(&quot;Private&quot;,&quot;Public&quot;), title = &quot;Anonymity&quot;,
+        tickLabels = c(&quot;Anon.&quot;,&quot;In pers.&quot;), tickCex = .9,
+        mergeVar = &quot;Cost&quot;, mergeWeights = table(d2$Cost) / nrow(d2) )
+)
+
+allocRows &lt;- list(
+  list( label = &quot;Bad sweets&quot;,  behavs = c(&quot;AntiPun&quot;,&quot;NeutPun&quot;),     fill = &quot;red&quot;,     rawFill = &quot;#FF9999&quot; ),
+  list( label = &quot;Empty box&quot;,   behavs = c(&quot;AntiEmpty&quot;,&quot;NeutEmpty&quot;), fill = &quot;white&quot;,   rawFill = &quot;grey82&quot; ),
+  list( label = &quot;Good sweets&quot;, behavs = c(&quot;AntiGood&quot;,&quot;NeutGood&quot;),   fill = niceGreen, rawFill = &quot;#99D699&quot; )
+)
+
+stackRows &lt;- function( pieces ) Reduce(function(f1, f2) rbind(f1, f2), pieces)
+
+predTable &lt;- function( column, predFn ) stackRows( lapply( behaviours, function(beh)
+  stackRows( lapply( column$levels, function(lv)
+    data.frame( behav = beh, level = lv, predFn(beh, lv) ) ) ) ) )
+
+allocFitted &lt;- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
+  marginalPred( allocMods[[beh]], column$var, lv, column$mergeVar, column$mergeWeights ) ) )
+
+allocRaw &lt;- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
+  rawPred( d2[[beh]][ d2[[column$var]] == lv ] ) ) )
+
+for( j in seq_along(allocColumns) ) {
+  cat( &quot;\nPlotted values, split by&quot;, allocColumns[[j]]$title, &quot;\n&quot; )
+  print( data.frame( allocFitted[[j]][,1:2], round(allocFitted[[j]][,-(1:2)], 3) ), row.names = FALSE )
+}</code></pre>
+<pre><code>## 
+## Plotted values, split by Economic cost 
+##      behav level  prop ci95l ci95u
+##    AntiPun     N 0.489 0.424 0.555
+##    AntiPun     Y 0.288 0.165 0.452
+##    NeutPun     N 0.124 0.087 0.173
+##    NeutPun     Y 0.084 0.031 0.209
+##  AntiEmpty     N 0.107 0.073 0.154
+##  AntiEmpty     Y 0.473 0.325 0.627
+##  NeutEmpty     N 0.114 0.079 0.161
+##  NeutEmpty     Y 0.262 0.153 0.412
+##   AntiGood     N 0.396 0.335 0.462
+##   AntiGood     Y 0.222 0.128 0.356
+##   NeutGood     N 0.755 0.696 0.806
+##   NeutGood     Y 0.620 0.468 0.752
+## 
+## Plotted values, split by Anonymity 
+##      behav   level  prop ci95l ci95u
+##    AntiPun Private 0.532 0.455 0.609
+##    AntiPun  Public 0.359 0.277 0.450
+##    NeutPun Private 0.122 0.081 0.181
+##    NeutPun  Public 0.112 0.067 0.181
+##  AntiEmpty Private 0.160 0.115 0.218
+##  AntiEmpty  Public 0.163 0.112 0.231
+##  NeutEmpty Private 0.107 0.068 0.164
+##  NeutEmpty  Public 0.176 0.118 0.254
+##   AntiGood Private 0.298 0.233 0.373
+##   AntiGood  Public 0.469 0.381 0.560
+##   NeutGood Private 0.761 0.690 0.820
+##   NeutGood  Public 0.700 0.613 0.775</code></pre>
+<pre class="r"><code>########################################### Drawing the allocation figure
+
+barXs &lt;- 1:4
+barXLim &lt;- c(0.5, 4.5)
+
+panelBars &lt;- function( tab, behavs ) stackRows( lapply( behavs, function(beh) tab[tab$behav == beh,] ) )
+
+drawBars &lt;- function( bars, centres, fill, halfWidth ) {
+  rect( centres - halfWidth, 0, centres + halfWidth, bars$prop, col = fill, border = &quot;black&quot; )
+  arrows( centres, bars$ci95l, centres, bars$ci95u, angle = 90, code = 3, length = .025 )
+}
+
+drawAllocPanel &lt;- function( row, j, showRaw, showLegend ) {
+  plot.new()
+  plot.window( xlim = barXLim, ylim = c(0,1), xaxs = &quot;i&quot;, yaxs = &quot;i&quot; )
+  if( showRaw ) {
+    drawBars( panelBars(allocFitted[[j]], row$behavs), barXs - .17, row$fill,    .16 )
+    drawBars( panelBars(allocRaw[[j]],    row$behavs), barXs + .17, row$rawFill, .16 )
+  } else {
+    drawBars( panelBars(allocFitted[[j]], row$behavs), barXs, row$fill, .32 )
+  }
+  axis( 2, at = seq(0,1,by=.1), labels = c(&quot;0&quot;, sprintf(&quot;%.1f&quot;, seq(.1,.9,by=.1)), &quot;1&quot;),
+        las = 1, cex.axis = .7, tcl = -.3, mgp = c(3,.5,0) )
+  mtext( &quot;Probability&quot;, side = 2, line = 1.9, cex = .8 )
+  box()
+  text( barXLim[1] + .25, .93, row$label, adj = c(0,1), font = 2, cex = 1.25 )
+  if( showLegend )
+    legend( &quot;topright&quot;, inset = c(.015,.03), legend = c(&quot;Model fit&quot;,&quot;Raw data&quot;),
+            fill = c(row$fill, row$rawFill), bty = &quot;n&quot;, cex = .8 )
+}
+
+# Base R has no nested-category x-axis, so it is drawn as two rows of labelled
+# cells below the panels: the column&#39;s factor within agent.
+drawNestedAxis &lt;- function( column ) {
+  plot.new()
+  plot.window( xlim = barXLim, ylim = c(0,2), xaxs = &quot;i&quot;, yaxs = &quot;i&quot; )
+  axisRows &lt;- list(
+    list( yTop = 2, cellWidth = 1, labels = rep(column$tickLabels, 2), cex = column$tickCex ),
+    list( yTop = 1, cellWidth = 2, labels = c(&quot;Antisocial agent&quot;,&quot;Neutral agent&quot;), cex = .95 )
+  )
+  for( axisRow in axisRows ) {
+    edges &lt;- seq( barXLim[1], barXLim[2], by = axisRow$cellWidth )
+    segments( edges, axisRow$yTop, edges, axisRow$yTop - 1 )
+    text( edges[-length(edges)] + axisRow$cellWidth/2,
+          axisRow$yTop - .5 - strheight(&quot;A&quot;, cex = axisRow$cex)/2,
+          axisRow$labels, cex = axisRow$cex, adj = c(.5, 0) )
+  }
+  segments( barXLim[1], 1, barXLim[2], 1 )
+}
+
+drawAllocFigure &lt;- function( showRaw ) {
+  oldPar &lt;- par( no.readonly = TRUE )
+  on.exit( par(oldPar) )
+  par( oma = c(0,0,1.8,0) )
+  layout( matrix(1:8, ncol = 2), heights = c(1, 1, 1, .36) )
+  for( j in seq_along(allocColumns) ) {
+    for( i in seq_along(allocRows) ) {
+      par( mar = c(.6, 3, .6, .6), cex = 1 )
+      drawAllocPanel( allocRows[[i]], j, showRaw, showLegend = showRaw &amp;&amp; i == 1 &amp;&amp; j == 1 )
+      # Column titles sit in the outer margin so that all rows stay equal height.
+      if( i == 1 ) mtext( allocColumns[[j]]$title, side = 3, outer = TRUE, line = .3,
+                          font = 2, at = mean(par(&quot;fig&quot;)[1:2]) )
+    }
+    par( mar = c(.2, 3, .2, .6) )
+    drawNestedAxis( allocColumns[[j]] )
+  }
+}
+
+png(&quot;figure2.png&quot;, width = 7, height = 7.5, units = &quot;in&quot;, res = 300)
+drawAllocFigure( showRaw = FALSE )
+dev.off()</code></pre>
+<pre><code>## png 
+##   2</code></pre>
+<pre class="r"><code>png(&quot;supplementaryFigure.png&quot;, width = 7, height = 7.5, units = &quot;in&quot;, res = 300)
+drawAllocFigure( showRaw = TRUE )
+dev.off()</code></pre>
+<pre><code>## png 
+##   2</code></pre>
+<pre class="r"><code>######################################### Makes main model table
 
 # Center age variable
 meanAge &lt;- mean(d2$Age)
@@ -825,8 +965,8 @@ format_OR_with_CI &lt;- function(OR, ci_lower, ci_upper, z_val, p_val) {
 # === TABLE 1: PUNISHMENT ===
 
 pun_table &lt;- create_OR_table(c(&quot;AntiPun&quot;, &quot;NeutPun&quot;), &quot;Punishment&quot;)</code></pre>
+<pre><code>## Waiting for profiling to be done...</code></pre>
 <pre><code>## Waiting for profiling to be done...
-## Waiting for profiling to be done...
 ## Waiting for profiling to be done...
 ## Waiting for profiling to be done...</code></pre>
 <pre class="r"><code>pun_formatted &lt;- lapply(1:8, function(i) {

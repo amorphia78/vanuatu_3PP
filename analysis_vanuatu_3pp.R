@@ -5,6 +5,7 @@ setwd_vanuatu_3pp()
 library(splines)
 library(sandwich)
 library(lmtest)
+library(marginaleffects)
 
 d2 <- read.table("data_vanuatu_3pp.tsv", sep="\t", fill=T, head=T, na.strings="*")
 d2$AntiPun <- as.factor(ifelse(d2$AntiGot == "Bad", "Y", "N"))
@@ -138,27 +139,152 @@ punTabAge6Plus
 round( punTabAge6Plus[,2] / ( punTabAge6Plus[,1] + punTabAge6Plus[,2] ), 2 )
 punMcNemar(d2Age6Plus)
 
-########################################### Calculate allocation variable summary statistics with CIs
+########################################### Allocation figure (Figure 2, and its supplementary version)
 
-ageForTable <- median(d2$Age)
-ageForTable
-results <- lapply( behaviours, function(beh) {
-  modForPreds <- glm(as.formula(paste(beh,"~Condition+Cost+Age")), data=d2, family="binomial")
-  predVals <- data.frame( Age = rep(ageForTable,4), Condition = c("Private","Public","Private","Public"), Cost = c("N","N","Y","Y"))
-  preds <- predict(modForPreds, newdata = predVals, type = "link", se.fit = TRUE)
-  upr <- preds$fit + (critval * preds$se.fit)
-  lwr <- preds$fit - (critval * preds$se.fit)
-  fit <- preds$fit
-  fit2 <- modForPreds$family$linkinv(fit)
-  upr2 <- modForPreds$family$linkinv(upr)
-  lwr2 <- modForPreds$family$linkinv(lwr)
-  data.frame( behav = beh, condition = predVals$Condition, cost = predVals$Cost, prop = fit2, ci95l = lwr2, ci95u = upr2 )
-})
-results <- Reduce(function(f1, f2) rbind(f1, f2),results)
-results
+# Each allocation is modelled from the two experimental factors plus age, and
+# plotted at the median age. The figure gives each experimental factor its own
+# column so that a pair of bars carries only one factor. Predictions for a
+# column are therefore averaged over the levels of the other factor, weighted
+# by how participants divide between them: a predictive margin (Graubard &
+# Korn, 1999, Biometrics 55:652-659). avg_predictions() performs that
+# averaging and its delta-method standard error on the probability scale; the
+# SE is moved to the logit scale before the interval is formed so that the
+# interval cannot fall outside (0,1).
 
-# Note that the graph corresponding to this is made in Excel from the above table.
-# R appears to have no convenient way to make nested-category x-axis labels of the type used.
+ageForFig <- median(d2$Age)
+allocMods <- lapply( behaviours, function(beh)
+  glm(as.formula(paste(beh,"~Condition+Cost+Age")), data=d2, family="binomial") )
+names(allocMods) <- behaviours
+
+marginalPred <- function( model, splitVar, splitLevel, mergeVar, mergeWeights ) {
+  grid <- data.frame( Age = rep(ageForFig, length(mergeWeights)) )
+  grid[[splitVar]] <- splitLevel
+  grid[[mergeVar]] <- names(mergeWeights)
+  grid$predWeight <- as.vector(mergeWeights)
+  pred <- avg_predictions( model, newdata = grid, by = splitVar, wts = "predWeight" )
+  seLogit <- pred$std.error / ( pred$estimate * (1 - pred$estimate) )
+  data.frame( prop = pred$estimate,
+              ci95l = plogis( qlogis(pred$estimate) - critval*seLogit ),
+              ci95u = plogis( qlogis(pred$estimate) + critval*seLogit ) )
+}
+
+# Observed proportions for the same cells, shown alongside the fit in the
+# supplementary version of the figure. Note these pool over age, whereas the
+# fitted bars hold it at the median.
+rawPred <- function( responses ) {
+  ci <- prop.test( sum(responses == "Y"), length(responses) )$conf.int
+  data.frame( prop = mean(responses == "Y"), ci95l = ci[1], ci95u = ci[2] )
+}
+
+# One column per experimental factor, one row per allocation. Bars within a
+# row run antisocial agent then neutral, each split by the column's factor.
+allocColumns <- list(
+  list( var = "Cost", levels = c("N","Y"), title = "Economic cost",
+        tickLabels = c("Free","Econ. cost"), tickCex = .8,
+        mergeVar = "Condition", mergeWeights = table(d2$Condition) / nrow(d2) ),
+  list( var = "Condition", levels = c("Private","Public"), title = "Anonymity",
+        tickLabels = c("Anon.","In pers."), tickCex = .9,
+        mergeVar = "Cost", mergeWeights = table(d2$Cost) / nrow(d2) )
+)
+
+allocRows <- list(
+  list( label = "Bad sweets",  behavs = c("AntiPun","NeutPun"),     fill = "red",     rawFill = "#FF9999" ),
+  list( label = "Empty box",   behavs = c("AntiEmpty","NeutEmpty"), fill = "white",   rawFill = "grey82" ),
+  list( label = "Good sweets", behavs = c("AntiGood","NeutGood"),   fill = niceGreen, rawFill = "#99D699" )
+)
+
+stackRows <- function( pieces ) Reduce(function(f1, f2) rbind(f1, f2), pieces)
+
+predTable <- function( column, predFn ) stackRows( lapply( behaviours, function(beh)
+  stackRows( lapply( column$levels, function(lv)
+    data.frame( behav = beh, level = lv, predFn(beh, lv) ) ) ) ) )
+
+allocFitted <- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
+  marginalPred( allocMods[[beh]], column$var, lv, column$mergeVar, column$mergeWeights ) ) )
+
+allocRaw <- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
+  rawPred( d2[[beh]][ d2[[column$var]] == lv ] ) ) )
+
+for( j in seq_along(allocColumns) ) {
+  cat( "\nPlotted values, split by", allocColumns[[j]]$title, "\n" )
+  print( data.frame( allocFitted[[j]][,1:2], round(allocFitted[[j]][,-(1:2)], 3) ), row.names = FALSE )
+}
+
+########################################### Drawing the allocation figure
+
+barXs <- 1:4
+barXLim <- c(0.5, 4.5)
+
+panelBars <- function( tab, behavs ) stackRows( lapply( behavs, function(beh) tab[tab$behav == beh,] ) )
+
+drawBars <- function( bars, centres, fill, halfWidth ) {
+  rect( centres - halfWidth, 0, centres + halfWidth, bars$prop, col = fill, border = "black" )
+  arrows( centres, bars$ci95l, centres, bars$ci95u, angle = 90, code = 3, length = .025 )
+}
+
+drawAllocPanel <- function( row, j, showRaw, showLegend ) {
+  plot.new()
+  plot.window( xlim = barXLim, ylim = c(0,1), xaxs = "i", yaxs = "i" )
+  if( showRaw ) {
+    drawBars( panelBars(allocFitted[[j]], row$behavs), barXs - .17, row$fill,    .16 )
+    drawBars( panelBars(allocRaw[[j]],    row$behavs), barXs + .17, row$rawFill, .16 )
+  } else {
+    drawBars( panelBars(allocFitted[[j]], row$behavs), barXs, row$fill, .32 )
+  }
+  axis( 2, at = seq(0,1,by=.1), labels = c("0", sprintf("%.1f", seq(.1,.9,by=.1)), "1"),
+        las = 1, cex.axis = .7, tcl = -.3, mgp = c(3,.5,0) )
+  mtext( "Probability", side = 2, line = 1.9, cex = .8 )
+  box()
+  text( barXLim[1] + .25, .93, row$label, adj = c(0,1), font = 2, cex = 1.25 )
+  if( showLegend )
+    legend( "topright", inset = c(.015,.03), legend = c("Model fit","Raw data"),
+            fill = c(row$fill, row$rawFill), bty = "n", cex = .8 )
+}
+
+# Base R has no nested-category x-axis, so it is drawn as two rows of labelled
+# cells below the panels: the column's factor within agent.
+drawNestedAxis <- function( column ) {
+  plot.new()
+  plot.window( xlim = barXLim, ylim = c(0,2), xaxs = "i", yaxs = "i" )
+  axisRows <- list(
+    list( yTop = 2, cellWidth = 1, labels = rep(column$tickLabels, 2), cex = column$tickCex ),
+    list( yTop = 1, cellWidth = 2, labels = c("Antisocial agent","Neutral agent"), cex = .95 )
+  )
+  for( axisRow in axisRows ) {
+    edges <- seq( barXLim[1], barXLim[2], by = axisRow$cellWidth )
+    segments( edges, axisRow$yTop, edges, axisRow$yTop - 1 )
+    text( edges[-length(edges)] + axisRow$cellWidth/2,
+          axisRow$yTop - .5 - strheight("A", cex = axisRow$cex)/2,
+          axisRow$labels, cex = axisRow$cex, adj = c(.5, 0) )
+  }
+  segments( barXLim[1], 1, barXLim[2], 1 )
+}
+
+drawAllocFigure <- function( showRaw ) {
+  oldPar <- par( no.readonly = TRUE )
+  on.exit( par(oldPar) )
+  par( oma = c(0,0,1.8,0) )
+  layout( matrix(1:8, ncol = 2), heights = c(1, 1, 1, .36) )
+  for( j in seq_along(allocColumns) ) {
+    for( i in seq_along(allocRows) ) {
+      par( mar = c(.6, 3, .6, .6), cex = 1 )
+      drawAllocPanel( allocRows[[i]], j, showRaw, showLegend = showRaw && i == 1 && j == 1 )
+      # Column titles sit in the outer margin so that all rows stay equal height.
+      if( i == 1 ) mtext( allocColumns[[j]]$title, side = 3, outer = TRUE, line = .3,
+                          font = 2, at = mean(par("fig")[1:2]) )
+    }
+    par( mar = c(.2, 3, .2, .6) )
+    drawNestedAxis( allocColumns[[j]] )
+  }
+}
+
+png("figure2.png", width = 7, height = 7.5, units = "in", res = 300)
+drawAllocFigure( showRaw = FALSE )
+dev.off()
+
+png("supplementaryFigure.png", width = 7, height = 7.5, units = "in", res = 300)
+drawAllocFigure( showRaw = TRUE )
+dev.off()
 
 ######################################### Makes main model table
 
