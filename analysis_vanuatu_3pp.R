@@ -178,18 +178,21 @@ rawPred <- function( responses ) {
 
 # One column per experimental factor, one row per allocation. Bars within a
 # row run antisocial agent then neutral, each split by the column's factor.
+# Both columns' axis labels share one font size, also used for the "...agent"
+# labels below them.
+axisLabelCex <- .8
 allocColumns <- list(
-  list( var = "Cost", levels = c("N","Y"), title = "Economic cost",
-        tickLabels = c("Free","Econ. cost"), tickCex = .8,
-        mergeVar = "Condition", mergeWeights = table(d2$Condition) / nrow(d2) ),
   list( var = "Condition", levels = c("Private","Public"), title = "Anonymity",
-        tickLabels = c("Anon.","In pers."), tickCex = .9,
-        mergeVar = "Cost", mergeWeights = table(d2$Cost) / nrow(d2) )
+        tickLabels = c("Anonymous","In person"), tickCex = axisLabelCex,
+        mergeVar = "Cost", mergeWeights = table(d2$Cost) / nrow(d2) ),
+  list( var = "Cost", levels = c("N","Y"), title = "Economic cost",
+        tickLabels = c("Free","Econ. cost"), tickCex = axisLabelCex,
+        mergeVar = "Condition", mergeWeights = table(d2$Condition) / nrow(d2) )
 )
 
 allocRows <- list(
   list( label = "Bad sweets",  behavs = c("AntiPun","NeutPun"),     fill = "red",     rawFill = "#FF9999" ),
-  list( label = "Empty box",   behavs = c("AntiEmpty","NeutEmpty"), fill = "white",   rawFill = "grey82" ),
+  list( label = "Empty box",   behavs = c("AntiEmpty","NeutEmpty"), fill = "grey60",  rawFill = "grey90" ),
   list( label = "Good sweets", behavs = c("AntiGood","NeutGood"),   fill = niceGreen, rawFill = "#99D699" )
 )
 
@@ -222,7 +225,7 @@ drawBars <- function( bars, centres, fill, halfWidth ) {
   arrows( centres, bars$ci95l, centres, bars$ci95u, angle = 90, code = 3, length = .025 )
 }
 
-drawAllocPanel <- function( row, j, showRaw, showLegend ) {
+drawAllocPanel <- function( row, j, showRaw, showLegend, showYAxis ) {
   plot.new()
   plot.window( xlim = barXLim, ylim = c(0,1), xaxs = "i", yaxs = "i" )
   if( showRaw ) {
@@ -231,11 +234,15 @@ drawAllocPanel <- function( row, j, showRaw, showLegend ) {
   } else {
     drawBars( panelBars(allocFitted[[j]], row$behavs), barXs, row$fill, .32 )
   }
-  axis( 2, at = seq(0,1,by=.1), labels = c("0", sprintf("%.1f", seq(.1,.9,by=.1)), "1"),
-        las = 1, cex.axis = .7, tcl = -.3, mgp = c(3,.5,0) )
-  mtext( "Probability", side = 2, line = 1.9, cex = .8 )
+  # Every panel shares the same 0-1 probability scale, so the axis is only
+  # drawn on the leftmost column to avoid repeating it across the figure.
+  if( showYAxis ) {
+    axis( 2, at = seq(0,1,by=.1), labels = c("0", sprintf("%.1f", seq(.1,.9,by=.1)), "1"),
+          las = 1, cex.axis = .7, tcl = -.3, mgp = c(3,.5,0) )
+    mtext( "Probability", side = 2, line = 1.9, cex = .8 )
+  }
   box()
-  text( barXLim[1] + .25, .93, row$label, adj = c(0,1), font = 2, cex = 1.25 )
+  text( barXLim[1] + .25, .93, row$label, adj = c(0,1), font = 2, cex = panelTitleCex )
   if( showLegend )
     legend( "topright", inset = c(.015,.03), legend = c("Model fit","Raw data"),
             fill = c(row$fill, row$rawFill), bty = "n", cex = .8 )
@@ -248,7 +255,7 @@ drawNestedAxis <- function( column ) {
   plot.window( xlim = barXLim, ylim = c(0,2), xaxs = "i", yaxs = "i" )
   axisRows <- list(
     list( yTop = 2, cellWidth = 1, labels = rep(column$tickLabels, 2), cex = column$tickCex ),
-    list( yTop = 1, cellWidth = 2, labels = c("Antisocial agent","Neutral agent"), cex = .95 )
+    list( yTop = 1, cellWidth = 2, labels = c("Antisocial agent","Neutral agent"), cex = column$tickCex )
   )
   for( axisRow in axisRows ) {
     edges <- seq( barXLim[1], barXLim[2], by = axisRow$cellWidth )
@@ -260,20 +267,40 @@ drawNestedAxis <- function( column ) {
   segments( barXLim[1], 1, barXLim[2], 1 )
 }
 
+# Panel titles (e.g. "Bad sweets") are set to the same size as the column
+# headers (e.g. "Economic cost") they sit below.
+panelTitleCex <- 1
+
+# Only the left column carries a y-axis, so its margin is wider than the
+# right column's. layout() gives both columns equal device width by default,
+# which would then leave their plot areas (device width minus margin)
+# unequal widths, so instead its column widths are set to make the two plot
+# areas -- and so both sets of bars -- come out equal: each column gets the
+# same shared plot width plus its own margin, margins converted from lines
+# to inches via par("csi").
+colMargins <- list( c(3, .6), c(.6, .6) )
+
 drawAllocFigure <- function( showRaw ) {
   oldPar <- par( no.readonly = TRUE )
   on.exit( par(oldPar) )
   par( oma = c(0,0,1.8,0) )
-  layout( matrix(1:8, ncol = 2), heights = c(1, 1, 1, .36) )
+  marIn <- sapply(colMargins, sum) * par("csi")
+  plotWidthIn <- ( par("din")[1] - sum(marIn) ) / 2
+  layout( matrix(1:8, ncol = 2), widths = plotWidthIn + marIn, heights = c(1, 1, 1, .36) )
   for( j in seq_along(allocColumns) ) {
+    marLeftRight <- colMargins[[j]]
     for( i in seq_along(allocRows) ) {
-      par( mar = c(.6, 3, .6, .6), cex = 1 )
-      drawAllocPanel( allocRows[[i]], j, showRaw, showLegend = showRaw && i == 1 && j == 1 )
+      par( mar = c(.6, marLeftRight[1], .6, marLeftRight[2]), cex = 1 )
+      # The legend sits in the economic-cost column: its bars run lower there
+      # than in the anonymity column, leaving the legend more room to clear
+      # the tallest (Good sweets) bars.
+      drawAllocPanel( allocRows[[i]], j, showRaw, showLegend = showRaw && j == 2,
+                      showYAxis = j == 1 )
       # Column titles sit in the outer margin so that all rows stay equal height.
       if( i == 1 ) mtext( allocColumns[[j]]$title, side = 3, outer = TRUE, line = .3,
-                          font = 2, at = mean(par("fig")[1:2]) )
+                          font = 2, cex = panelTitleCex, at = mean(par("fig")[1:2]) )
     }
-    par( mar = c(.2, 3, .2, .6) )
+    par( mar = c(.2, marLeftRight[1], .2, marLeftRight[2]) )
     drawNestedAxis( allocColumns[[j]] )
   }
 }
