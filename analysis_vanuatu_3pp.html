@@ -11,7 +11,7 @@
 
 <meta name="author" content="Anon For Peer Review" />
 
-<meta name="date" content="2026-02-21" />
+<meta name="date" content="2026-08-12" />
 
 <title>analysis_vanuatu_3pp.R</title>
 
@@ -353,7 +353,7 @@ display: none;
 
 <h1 class="title toc-ignore">analysis_vanuatu_3pp.R</h1>
 <h4 class="author">Anon For Peer Review</h4>
-<h4 class="date">2026-02-21</h4>
+<h4 class="date">2026-08-12</h4>
 
 </div>
 
@@ -363,8 +363,8 @@ display: none;
 setwd_vanuatu_3pp()
 
 library(splines)
-library(gmodels)
-library(epitools)
+library(sandwich)
+library(lmtest)
 
 d2 &lt;- read.table(&quot;data_vanuatu_3pp.tsv&quot;, sep=&quot;\t&quot;, fill=T, head=T, na.strings=&quot;*&quot;)
 d2$AntiPun &lt;- as.factor(ifelse(d2$AntiGot == &quot;Bad&quot;, &quot;Y&quot;, &quot;N&quot;))
@@ -468,6 +468,24 @@ table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))</
 ##       0       1       9       6       2       3       0</code></pre>
 <pre class="r"><code>########################################### Punish antisocial more?
 
+# Each participant judged both actors, so these proportions are paired. The p value is
+# McNemar&#39;s exact test, i.e. an exact binomial test on the discordant participants. The
+# odds ratio compares the two marginal proportions, so its confidence interval uses
+# cluster-robust standard errors (sandwich::vcovCL) clustered on participant.
+punMcNemar &lt;- function(dat) {
+  nP &lt;- nrow(dat)
+  long &lt;- data.frame( id = rep(seq_len(nP), 2), anti = rep(1:0, each = nP),
+                      pun = c(dat$AntiPunNum, dat$NeutPunNum) )
+  mod &lt;- glm( pun ~ anti, data = long, family = &quot;binomial&quot; )
+  ci &lt;- exp( coefci( mod, parm = &quot;anti&quot;, vcov. = vcovCL, cluster = ~id ) )
+  data.frame( n = nP,
+     antiOnly = sum( dat$AntiPunNum &gt; dat$NeutPunNum ),
+     neutOnly = sum( dat$AntiPunNum &lt; dat$NeutPunNum ),
+     OR = exp( coef(mod)[[&quot;anti&quot;]] ), ci95l = ci[1], ci95u = ci[2],
+     p = binom.test( sum( dat$AntiPunNum &gt; dat$NeutPunNum ),
+                     sum( dat$AntiPunNum != dat$NeutPunNum ), 0.5 )$p.value )
+}
+
 punTab &lt;- rbind( table(d2$NeutPun), table(d2$AntiPun) )
 punTab</code></pre>
 <pre><code>##        N   Y
@@ -475,18 +493,9 @@ punTab</code></pre>
 ## [2,] 154 149</code></pre>
 <pre class="r"><code>round( punTab[,2] / ( punTab[,1] + punTab[,2] ), 2 )</code></pre>
 <pre><code>## [1] 0.12 0.49</code></pre>
-<pre class="r"><code>fisher.test(punTab)</code></pre>
-<pre><code>## 
-##  Fisher&#39;s Exact Test for Count Data
-## 
-## data:  punTab
-## p-value &lt; 2.2e-16
-## alternative hypothesis: true odds ratio is not equal to 1
-## 95 percent confidence interval:
-##   4.801354 11.585997
-## sample estimates:
-## odds ratio 
-##   7.382472</code></pre>
+<pre class="r"><code>punMcNemar(d2)</code></pre>
+<pre><code>##     n antiOnly neutOnly       OR    ci95l    ci95u            p
+## 1 303      139       25 7.408534 4.741816 11.57497 2.289853e-20</code></pre>
 <pre class="r"><code>d2Age4 &lt;- d2[d2$Age&gt;=4&amp;d2$Age&lt;5,]
 punTabAge4 &lt;- rbind( table(d2Age4$NeutPun), table(d2Age4$AntiPun) )
 punTabAge4</code></pre>
@@ -495,20 +504,9 @@ punTabAge4</code></pre>
 ## [2,] 26 6</code></pre>
 <pre class="r"><code>round( punTabAge4[,2] / ( punTabAge4[,1] + punTabAge4[,2] ), 2 )</code></pre>
 <pre><code>## [1] 0.09 0.19</code></pre>
-<pre class="r"><code>sum(punTabAge4)</code></pre>
-<pre><code>## [1] 64</code></pre>
-<pre class="r"><code>fisher.test(punTabAge4)</code></pre>
-<pre><code>## 
-##  Fisher&#39;s Exact Test for Count Data
-## 
-## data:  punTabAge4
-## p-value = 0.4741
-## alternative hypothesis: true odds ratio is not equal to 1
-## 95 percent confidence interval:
-##   0.4190297 15.0024455
-## sample estimates:
-## odds ratio 
-##   2.203449</code></pre>
+<pre class="r"><code>punMcNemar(d2Age4)</code></pre>
+<pre><code>##    n antiOnly neutOnly       OR     ci95l    ci95u     p
+## 1 32        4        1 2.230769 0.6798808 7.319416 0.375</code></pre>
 <pre class="r"><code>d2Age5 &lt;- d2[d2$Age&gt;=5&amp;d2$Age&lt;6,]
 punTabAge5 &lt;- rbind( table(d2Age5$NeutPun), table(d2Age5$AntiPun) )
 punTabAge5</code></pre>
@@ -517,20 +515,9 @@ punTabAge5</code></pre>
 ## [2,] 45 20</code></pre>
 <pre class="r"><code>round( punTabAge5[,2] / ( punTabAge5[,1] + punTabAge5[,2] ), 2 )</code></pre>
 <pre><code>## [1] 0.11 0.31</code></pre>
-<pre class="r"><code>sum(punTabAge5)</code></pre>
-<pre><code>## [1] 130</code></pre>
-<pre class="r"><code>fisher.test(punTabAge5)</code></pre>
-<pre><code>## 
-##  Fisher&#39;s Exact Test for Count Data
-## 
-## data:  punTabAge5
-## p-value = 0.008645
-## alternative hypothesis: true odds ratio is not equal to 1
-## 95 percent confidence interval:
-##   1.335452 11.140417
-## sample estimates:
-## odds ratio 
-##   3.646111</code></pre>
+<pre class="r"><code>punMcNemar(d2Age5)</code></pre>
+<pre><code>##    n antiOnly neutOnly      OR    ci95l    ci95u           p
+## 1 65       16        3 3.68254 1.558103 8.703594 0.004425049</code></pre>
 <pre class="r"><code>d2Age6Plus &lt;- d2[d2$Age&gt;=6,]
 punTabAge6Plus &lt;- rbind( table(d2Age6Plus$NeutPun), table(d2Age6Plus$AntiPun) )
 punTabAge6Plus</code></pre>
@@ -539,20 +526,9 @@ punTabAge6Plus</code></pre>
 ## [2,]  83 123</code></pre>
 <pre class="r"><code>round( punTabAge6Plus[,2] / ( punTabAge6Plus[,1] + punTabAge6Plus[,2] ), 2 )</code></pre>
 <pre><code>## [1] 0.12 0.60</code></pre>
-<pre class="r"><code>sum(punTabAge6Plus)</code></pre>
-<pre><code>## [1] 412</code></pre>
-<pre class="r"><code>fisher.test(punTabAge6Plus)</code></pre>
-<pre><code>## 
-##  Fisher&#39;s Exact Test for Count Data
-## 
-## data:  punTabAge6Plus
-## p-value &lt; 2.2e-16
-## alternative hypothesis: true odds ratio is not equal to 1
-## 95 percent confidence interval:
-##   6.342129 18.455346
-## sample estimates:
-## odds ratio 
-##    10.6598</code></pre>
+<pre class="r"><code>punMcNemar(d2Age6Plus)</code></pre>
+<pre><code>##     n antiOnly neutOnly       OR    ci95l    ci95u            p
+## 1 206      119       21 10.72916 6.034734 19.07537 8.201245e-18</code></pre>
 <pre class="r"><code>########################################### Calculate allocation variable summary statistics with CIs
 
 ageForTable &lt;- median(d2$Age)

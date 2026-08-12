@@ -3,8 +3,8 @@
 setwd_vanuatu_3pp()
 
 library(splines)
-library(gmodels)
-library(epitools)
+library(sandwich)
+library(lmtest)
 
 d2 <- read.table("data_vanuatu_3pp.tsv", sep="\t", fill=T, head=T, na.strings="*")
 d2$AntiPun <- as.factor(ifelse(d2$AntiGot == "Bad", "Y", "N"))
@@ -97,31 +97,46 @@ table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))
 
 ########################################### Punish antisocial more?
 
+# Each participant judged both actors, so these proportions are paired. The p value is
+# McNemar's exact test, i.e. an exact binomial test on the discordant participants. The
+# odds ratio compares the two marginal proportions, so its confidence interval uses
+# cluster-robust standard errors (sandwich::vcovCL) clustered on participant.
+punMcNemar <- function(dat) {
+  nP <- nrow(dat)
+  long <- data.frame( id = rep(seq_len(nP), 2), anti = rep(1:0, each = nP),
+                      pun = c(dat$AntiPunNum, dat$NeutPunNum) )
+  mod <- glm( pun ~ anti, data = long, family = "binomial" )
+  ci <- exp( coefci( mod, parm = "anti", vcov. = vcovCL, cluster = ~id ) )
+  data.frame( n = nP,
+     antiOnly = sum( dat$AntiPunNum > dat$NeutPunNum ),
+     neutOnly = sum( dat$AntiPunNum < dat$NeutPunNum ),
+     OR = exp( coef(mod)[["anti"]] ), ci95l = ci[1], ci95u = ci[2],
+     p = binom.test( sum( dat$AntiPunNum > dat$NeutPunNum ),
+                     sum( dat$AntiPunNum != dat$NeutPunNum ), 0.5 )$p.value )
+}
+
 punTab <- rbind( table(d2$NeutPun), table(d2$AntiPun) )
 punTab
 round( punTab[,2] / ( punTab[,1] + punTab[,2] ), 2 )
-fisher.test(punTab)
+punMcNemar(d2)
 
 d2Age4 <- d2[d2$Age>=4&d2$Age<5,]
 punTabAge4 <- rbind( table(d2Age4$NeutPun), table(d2Age4$AntiPun) )
 punTabAge4
 round( punTabAge4[,2] / ( punTabAge4[,1] + punTabAge4[,2] ), 2 )
-sum(punTabAge4)
-fisher.test(punTabAge4)
+punMcNemar(d2Age4)
 
 d2Age5 <- d2[d2$Age>=5&d2$Age<6,]
 punTabAge5 <- rbind( table(d2Age5$NeutPun), table(d2Age5$AntiPun) )
 punTabAge5
 round( punTabAge5[,2] / ( punTabAge5[,1] + punTabAge5[,2] ), 2 )
-sum(punTabAge5)
-fisher.test(punTabAge5)
+punMcNemar(d2Age5)
 
 d2Age6Plus <- d2[d2$Age>=6,]
 punTabAge6Plus <- rbind( table(d2Age6Plus$NeutPun), table(d2Age6Plus$AntiPun) )
 punTabAge6Plus
 round( punTabAge6Plus[,2] / ( punTabAge6Plus[,1] + punTabAge6Plus[,2] ), 2 )
-sum(punTabAge6Plus)
-fisher.test(punTabAge6Plus)
+punMcNemar(d2Age6Plus)
 
 ########################################### Calculate allocation variable summary statistics with CIs
 
