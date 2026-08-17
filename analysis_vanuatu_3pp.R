@@ -149,11 +149,12 @@ punMcNemar(d2Age6Plus)
 ########################################### Allocation figure (Figure 2, and its supplementary version)
 
 # Each allocation is modelled from the two experimental factors plus age, and
-# plotted at the median age. Each column of the figure varies one experimental
-# factor and holds the other at a reference level: the anonymity column is free
-# of economic cost, the economic cost column is anonymous. Every bar is
-# therefore a prediction for a design cell children were tested in, and the
-# anonymous free-of-cost cell is common to both columns.
+# plotted at the median age. Every bar is a prediction for a design cell
+# children were actually tested in, rather than an average over a factor. The
+# cells run as a common baseline (anonymous and free of economic cost) followed
+# by each manipulation applied on its own, so each bar is read against the same
+# reference. The supplementary version adds the fourth cell, in which both
+# manipulations apply, and the observed proportions alongside each fit.
 
 ageForFig <- median(d2$Age)
 cat( "\nMedian age, at which figure predictions are made:", round(ageForFig, 3), "\n" )
@@ -162,35 +163,35 @@ allocMods <- lapply( behaviours, function(beh)
   glm(as.formula(paste(beh,"~Condition+Cost+Age")), data=d2, family="binomial") )
 names(allocMods) <- behaviours
 
-cellPred <- function( model, splitVar, splitLevel, holdVar, holdLevel ) {
-  grid <- data.frame( Age = ageForFig )
-  grid[[splitVar]] <- splitLevel
-  grid[[holdVar]] <- holdLevel
-  pred <- predict( model, newdata = grid, type = "link", se.fit = TRUE )
+allocCells <- data.frame(
+  Condition = c("Private","Public","Private","Public"),
+  Cost      = c("N","N","Y","Y"),
+  label     = c("Anonymous,\ncost free","In person","Econ. cost","In person,\necon. cost")
+)
+mainCells <- 1:3   # the fourth cell is shown only in the supplementary figure
+
+# Intervals are formed on the link scale and back-transformed, so they cannot
+# extend outside (0,1).
+cellPred <- function( beh, rows ) {
+  model <- allocMods[[beh]]
+  pred <- predict( model, type = "link", se.fit = TRUE,
+                   newdata = data.frame( Age = ageForFig, allocCells[rows,] ) )
   data.frame( prop  = model$family$linkinv( pred$fit ),
               ci95l = model$family$linkinv( pred$fit - critval * pred$se.fit ),
               ci95u = model$family$linkinv( pred$fit + critval * pred$se.fit ) )
 }
 
-# Observed proportions for the same design cells, shown alongside the fit in the
-# supplementary version of the figure. Note these pool over age, whereas the
-# fitted bars hold it at the median.
-rawPred <- function( responses ) {
+# Observed proportions in the same design cells. Note these pool over age,
+# whereas the fitted bars hold it at the median.
+cellRaw <- function( beh, rows ) stackRows( lapply( rows, function(i) {
+  responses <- d2[[beh]][ d2$Condition == allocCells$Condition[i] & d2$Cost == allocCells$Cost[i] ]
   ci <- prop.test( sum(responses == "Y"), length(responses) )$conf.int
-  data.frame( prop = mean(responses == "Y"), ci95l = ci[1], ci95u = ci[2] )
-}
+  data.frame( n = length(responses), prop = mean(responses == "Y"), ci95l = ci[1], ci95u = ci[2] )
+}) )
 
-# One column per experimental factor, one row per allocation. Bars within a
-# row run antisocial agent then neutral, each split by the column's factor.
+# One column per actor, one row per allocation.
 axisLabelCex <- .8
-allocColumns <- list(
-  list( var = "Condition", levels = c("Private","Public"), title = "Anonymity",
-        tickLabels = c("Anonymous","In person"), tickCex = axisLabelCex,
-        holdVar = "Cost", holdLevel = "N" ),
-  list( var = "Cost", levels = c("N","Y"), title = "Economic cost",
-        tickLabels = c("Free","Econ. cost"), tickCex = axisLabelCex,
-        holdVar = "Condition", holdLevel = "Private" )
-)
+agentTitles <- c("Antisocial agent","Neutral agent")
 
 allocRows <- list(
   list( label = "Bad sweets",  behavs = c("AntiPun","NeutPun"),     fill = "red",     rawFill = "#FF9999" ),
@@ -200,110 +201,102 @@ allocRows <- list(
 
 stackRows <- function( pieces ) Reduce(function(f1, f2) rbind(f1, f2), pieces)
 
-predTable <- function( column, predFn ) stackRows( lapply( behaviours, function(beh)
-  stackRows( lapply( column$levels, function(lv)
-    data.frame( behav = beh, level = lv, predFn(beh, lv) ) ) ) ) )
-
-allocFitted <- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
-  cellPred( allocMods[[beh]], column$var, lv, column$holdVar, column$holdLevel ) ) )
-
-allocRaw <- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
-  rawPred( d2[[beh]][ d2[[column$var]] == lv & d2[[column$holdVar]] == column$holdLevel ] ) ) )
-
-for( j in seq_along(allocColumns) ) {
-  cat( "\nPlotted values, split by", allocColumns[[j]]$title, "- holding",
-       allocColumns[[j]]$holdVar, "at", allocColumns[[j]]$holdLevel, "\n" )
-  print( data.frame( allocFitted[[j]][,1:2], round(allocFitted[[j]][,-(1:2)], 3) ), row.names = FALSE )
-}
+cat( "\nPlotted values (cell 4 appears in the supplementary figure only)\n" )
+print( stackRows( lapply( behaviours, function(beh)
+  data.frame( behav = beh, allocCells[, c("Condition","Cost")], cellRaw(beh, 1:4)["n"],
+              fitted = round(cellPred(beh, 1:4)$prop, 3),
+              raw    = round(cellRaw(beh, 1:4)$prop, 3) ) ) ), row.names = FALSE )
 
 ########################################### Drawing the allocation figure
-
-barXs <- 1:4
-barXLim <- c(0.5, 4.5)
-
-panelBars <- function( tab, behavs ) stackRows( lapply( behavs, function(beh) tab[tab$behav == beh,] ) )
 
 drawBars <- function( bars, centres, fill, halfWidth ) {
   rect( centres - halfWidth, 0, centres + halfWidth, bars$prop, col = fill, border = "black" )
   arrows( centres, bars$ci95l, centres, bars$ci95u, angle = 90, code = 3, length = .025 )
 }
 
-drawAllocPanel <- function( row, j, showRaw, showLegend, showYAxis ) {
+drawAllocPanel <- function( row, j, rows, showRaw, showLegend, showYAxis, showXAxis ) {
+  beh <- row$behavs[j]
+  xs <- seq_along(rows)
+  xLim <- c( 0.5, length(rows) + 0.5 )
   plot.new()
-  plot.window( xlim = barXLim, ylim = c(0,1), xaxs = "i", yaxs = "i" )
+  plot.window( xlim = xLim, ylim = c(0,1), xaxs = "i", yaxs = "i" )
+  # The paired bars are set wide within their cell, leaving only a narrow gap
+  # between cells, so that the supplementary figure can carry its extra cell
+  # and second bar at close to the main figure's width rather than being
+  # shrunk to fit the page.
   if( showRaw ) {
-    drawBars( panelBars(allocFitted[[j]], row$behavs), barXs - .17, row$fill,    .16 )
-    drawBars( panelBars(allocRaw[[j]],    row$behavs), barXs + .17, row$rawFill, .16 )
+    drawBars( cellPred(beh, rows), xs - .21, row$fill,    .20 )
+    drawBars( cellRaw(beh, rows),  xs + .21, row$rawFill, .20 )
   } else {
-    drawBars( panelBars(allocFitted[[j]], row$behavs), barXs, row$fill, .32 )
+    drawBars( cellPred(beh, rows), xs, row$fill, .32 )
   }
-  # Every panel shares the same 0-1 probability scale, so the axis is only
-  # drawn on the leftmost column to avoid repeating it across the figure.
+  # Every panel shares the same 0-1 probability scale and the same cells, so
+  # each axis is drawn once: the y-axis on the leftmost column, the cell labels
+  # on the bottom row. Labels carrying a line break are split by axis() itself,
+  # and padj = 1 top-aligns them, so a one-line label ("In person") lines up
+  # with the first line of a two-line one rather than with its last. That
+  # alignment also holds them well clear of the axis, hence the negative line.
   if( showYAxis ) {
     axis( 2, at = seq(0,1,by=.1), labels = c("0", sprintf("%.1f", seq(.1,.9,by=.1)), "1"),
           las = 1, cex.axis = .7, tcl = -.3, mgp = c(3,.5,0) )
     mtext( "Probability", side = 2, line = 1.9, cex = .8 )
   }
+  if( showXAxis )
+    axis( 1, at = xs, labels = allocCells$label[rows], tick = FALSE,
+          cex.axis = axisLabelCex, padj = 1, line = -1.5 )
   box()
-  text( barXLim[1] + .25, .93, row$label, adj = c(0,1), font = 2, cex = panelTitleCex )
+  # Sits high in the panel to clear the tallest interval, which in the neutral
+  # good-sweets panel reaches 0.85.
+  text( xLim[1] + .18, .97, row$label, adj = c(0,1), font = 2, cex = panelTitleCex )
   if( showLegend )
     legend( "topright", inset = c(.015,.03), legend = c("Model fit","Raw data"),
             fill = c(row$fill, row$rawFill), bty = "n", cex = .8 )
 }
 
-# Base R has no nested-category x-axis, so it is drawn as two rows of labelled
-# cells below the panels: the column's factor within agent.
-drawNestedAxis <- function( column ) {
-  plot.new()
-  plot.window( xlim = barXLim, ylim = c(0,2), xaxs = "i", yaxs = "i" )
-  axisRows <- list(
-    list( yTop = 2, cellWidth = 1, labels = rep(column$tickLabels, 2), cex = column$tickCex ),
-    list( yTop = 1, cellWidth = 2, labels = c("Antisocial agent","Neutral agent"), cex = column$tickCex )
-  )
-  for( axisRow in axisRows ) {
-    edges <- seq( barXLim[1], barXLim[2], by = axisRow$cellWidth )
-    segments( edges, axisRow$yTop, edges, axisRow$yTop - 1 )
-    text( edges[-length(edges)] + axisRow$cellWidth/2,
-          axisRow$yTop - .5 - strheight("A", cex = axisRow$cex)/2,
-          axisRow$labels, cex = axisRow$cex, adj = c(.5, 0) )
-  }
-  segments( barXLim[1], 1, barXLim[2], 1 )
-}
-
 panelTitleCex <- 1
-colMargins <- list( c(3, .6), c(.6, .6) )
+outerTop <- 1.8
+colMargins <- list( c(3, .6), c(.6, .6) )   # left, right, per column
+rowMargins <- list( c(.6, .6), c(.6, .6), c(.6, 1.9) )   # top, bottom, per row
 
-drawAllocFigure <- function( showRaw ) {
+drawAllocFigure <- function( rows, showRaw ) {
   oldPar <- par( no.readonly = TRUE )
   on.exit( par(oldPar) )
-  par( oma = c(0,0,1.8,0) )
-  marIn <- sapply(colMargins, sum) * par("csi")
-  plotWidthIn <- ( par("din")[1] - sum(marIn) ) / 2
-  layout( matrix(1:8, ncol = 2), widths = plotWidthIn + marIn, heights = c(1, 1, 1, .36) )
-  for( j in seq_along(allocColumns) ) {
-    marLeftRight <- colMargins[[j]]
+  par( oma = c(0, 0, outerTop, 0) )
+  # Only the left column carries a y-axis and only the bottom row carries the
+  # cell labels, so those need wider margins than the rest. Panel sizes are set
+  # from the margins actually used, so that every panel's plot area -- and so
+  # every set of bars -- comes out the same size despite that.
+  colMarIn <- sapply( colMargins, sum ) * par("csi")
+  rowMarIn <- sapply( rowMargins, sum ) * par("csi")
+  plotWidthIn  <- ( par("din")[1] - sum(colMarIn) ) / length(colMargins)
+  plotHeightIn <- ( par("din")[2] - outerTop*par("csi") - sum(rowMarIn) ) / length(rowMargins)
+  layout( matrix(1:6, ncol = 2), widths = plotWidthIn + colMarIn,
+          heights = plotHeightIn + rowMarIn )
+  for( j in 1:2 ) {
     for( i in seq_along(allocRows) ) {
-      par( mar = c(.6, marLeftRight[1], .6, marLeftRight[2]), cex = 1 )
-      # The legend sits in the economic-cost column: its bars run lower there
-      # than in the anonymity column, leaving the legend more room to clear
-      # the tallest (Good sweets) bars.
-      drawAllocPanel( allocRows[[i]], j, showRaw, showLegend = showRaw && j == 2,
-                      showYAxis = j == 1 )
+      par( cex = 1, mar = c( rowMargins[[i]][2], colMargins[[j]][1],
+                             rowMargins[[i]][1], colMargins[[j]][2] ) )
+      # The legend sits in the antisocial column, whose bars run lower than the
+      # neutral column's, leaving it room to clear the tallest bars.
+      drawAllocPanel( allocRows[[i]], j, rows, showRaw,
+                      showLegend = showRaw && j == 1, showYAxis = j == 1,
+                      showXAxis = i == length(allocRows) )
       # Column titles sit in the outer margin so that all rows stay equal height.
-      if( i == 1 ) mtext( allocColumns[[j]]$title, side = 3, outer = TRUE, line = .3,
+      if( i == 1 ) mtext( agentTitles[j], side = 3, outer = TRUE, line = .3,
                           font = 2, cex = panelTitleCex, at = mean(par("fig")[1:2]) )
     }
-    par( mar = c(.2, marLeftRight[1], .2, marLeftRight[2]) )
-    drawNestedAxis( allocColumns[[j]] )
   }
 }
 
 png("figure2.png", width = 7, height = 7.5, units = "in", res = 300)
-drawAllocFigure( showRaw = FALSE )
+drawAllocFigure( mainCells, showRaw = FALSE )
 dev.off()
 
-png("supplementaryFigure.png", width = 7, height = 7.5, units = "in", res = 300)
-drawAllocFigure( showRaw = TRUE )
+# The supplementary version carries an extra cell, so it is drawn slightly
+# wider. The widest label line ("Anonymous,") is 0.72in, which at this width
+# leaves a 0.09in gap between neighbouring labels.
+png("supplementaryFigure.png", width = 7.5, height = 7.5, units = "in", res = 300)
+drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE )
 dev.off()
 
 ######################################### Makes main model table
