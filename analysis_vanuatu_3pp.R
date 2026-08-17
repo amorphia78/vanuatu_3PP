@@ -5,7 +5,6 @@ setwd_vanuatu_3pp()
 library(splines)
 library(sandwich)
 library(lmtest)
-library(marginaleffects)
 
 d2 <- read.table("data_vanuatu_3pp.tsv", sep="\t", fill=T, head=T, na.strings="*")
 d2$AntiPun <- as.factor(ifelse(d2$AntiGot == "Bad", "Y", "N"))
@@ -46,7 +45,7 @@ plotPropWithConf <- function(model, predData, colour, alphaF=.1,lineType='solid'
   topOfPoly <- data.frame( x = predData$Age, y = upr2 )
   topOfPoly <- topOfPoly[order(topOfPoly$x),]
   bottomOfPoly <- data.frame( x = predData$Age, y = lwr2 )
-  bottomOfPoly <- bottomOfPoly[order(-topOfPoly$x),]
+  bottomOfPoly <- bottomOfPoly[order(-bottomOfPoly$x),]
   polygon(x=c(topOfPoly$x,bottomOfPoly$x), y=c(topOfPoly$y,bottomOfPoly$y),col=adjustcolor(colour,alpha.f=alphaF),border=NA)
   lines(x=predData$Age,y=fit2, col=colour, lwd=2, lty=lineType)
   lines(x=predData$Age,y=upr2, col=colour, lty="dotted")
@@ -78,10 +77,19 @@ plotTwoPointsGreenRed <- function( DVGreen, DVRed, whichDatGreen, whichDatRed, s
   }
 }
 
-########################################### Output participant age table for methods section
+########################################### Output participant descriptives and age table for methods section
+
+ur <- subset( d2, Location == "Urban")
+rur <- subset( d2, Location == "Rural")
+
+describeSample <- function( dat ) data.frame(
+  n = nrow(dat), meanAge = round(mean(dat$Age), 2), sdAge = round(sd(dat$Age), 2),
+  minAge = round(min(dat$Age), 2), maxAge = round(max(dat$Age), 2),
+  girls = sum(dat$Sex == "F"), boys = sum(dat$Sex == "M") )
+
+rbind( All = describeSample(d2), Urban = describeSample(ur), Rural = describeSample(rur) )
 
 ages <- seq(4,10,by=1)
-ur <- subset( d2, Location == "Urban")
 tableAges <- data.frame(
   Age = ages,
   FreePub = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "N" & ur$Condition == "Public" & floor(ur$Age)==x])),
@@ -93,7 +101,6 @@ tableAges
 sum(tableAges[,2:5])
 length(d2[,1])
 
-rur <- subset( d2, Location == "Rural")
 table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))
 
 ########################################### Punish antisocial more?
@@ -142,33 +149,30 @@ punMcNemar(d2Age6Plus)
 ########################################### Allocation figure (Figure 2, and its supplementary version)
 
 # Each allocation is modelled from the two experimental factors plus age, and
-# plotted at the median age. The figure gives each experimental factor its own
-# column so that a pair of bars carries only one factor. Predictions for a
-# column are therefore averaged over the levels of the other factor, weighted
-# by how participants divide between them: a predictive margin (Graubard &
-# Korn, 1999, Biometrics 55:652-659). avg_predictions() performs that
-# averaging and its delta-method standard error on the probability scale; the
-# SE is moved to the logit scale before the interval is formed so that the
-# interval cannot fall outside (0,1).
+# plotted at the median age. Each column of the figure varies one experimental
+# factor and holds the other at a reference level: the anonymity column is free
+# of economic cost, the economic cost column is anonymous. Every bar is
+# therefore a prediction for a design cell children were tested in, and the
+# anonymous free-of-cost cell is common to both columns.
 
 ageForFig <- median(d2$Age)
+cat( "\nMedian age, at which figure predictions are made:", round(ageForFig, 3), "\n" )
+
 allocMods <- lapply( behaviours, function(beh)
   glm(as.formula(paste(beh,"~Condition+Cost+Age")), data=d2, family="binomial") )
 names(allocMods) <- behaviours
 
-marginalPred <- function( model, splitVar, splitLevel, mergeVar, mergeWeights ) {
-  grid <- data.frame( Age = rep(ageForFig, length(mergeWeights)) )
+cellPred <- function( model, splitVar, splitLevel, holdVar, holdLevel ) {
+  grid <- data.frame( Age = ageForFig )
   grid[[splitVar]] <- splitLevel
-  grid[[mergeVar]] <- names(mergeWeights)
-  grid$predWeight <- as.vector(mergeWeights)
-  pred <- avg_predictions( model, newdata = grid, by = splitVar, wts = "predWeight" )
-  seLogit <- pred$std.error / ( pred$estimate * (1 - pred$estimate) )
-  data.frame( prop = pred$estimate,
-              ci95l = plogis( qlogis(pred$estimate) - critval*seLogit ),
-              ci95u = plogis( qlogis(pred$estimate) + critval*seLogit ) )
+  grid[[holdVar]] <- holdLevel
+  pred <- predict( model, newdata = grid, type = "link", se.fit = TRUE )
+  data.frame( prop  = model$family$linkinv( pred$fit ),
+              ci95l = model$family$linkinv( pred$fit - critval * pred$se.fit ),
+              ci95u = model$family$linkinv( pred$fit + critval * pred$se.fit ) )
 }
 
-# Observed proportions for the same cells, shown alongside the fit in the
+# Observed proportions for the same design cells, shown alongside the fit in the
 # supplementary version of the figure. Note these pool over age, whereas the
 # fitted bars hold it at the median.
 rawPred <- function( responses ) {
@@ -178,16 +182,14 @@ rawPred <- function( responses ) {
 
 # One column per experimental factor, one row per allocation. Bars within a
 # row run antisocial agent then neutral, each split by the column's factor.
-# Both columns' axis labels share one font size, also used for the "...agent"
-# labels below them.
 axisLabelCex <- .8
 allocColumns <- list(
   list( var = "Condition", levels = c("Private","Public"), title = "Anonymity",
         tickLabels = c("Anonymous","In person"), tickCex = axisLabelCex,
-        mergeVar = "Cost", mergeWeights = table(d2$Cost) / nrow(d2) ),
+        holdVar = "Cost", holdLevel = "N" ),
   list( var = "Cost", levels = c("N","Y"), title = "Economic cost",
         tickLabels = c("Free","Econ. cost"), tickCex = axisLabelCex,
-        mergeVar = "Condition", mergeWeights = table(d2$Condition) / nrow(d2) )
+        holdVar = "Condition", holdLevel = "Private" )
 )
 
 allocRows <- list(
@@ -203,13 +205,14 @@ predTable <- function( column, predFn ) stackRows( lapply( behaviours, function(
     data.frame( behav = beh, level = lv, predFn(beh, lv) ) ) ) ) )
 
 allocFitted <- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
-  marginalPred( allocMods[[beh]], column$var, lv, column$mergeVar, column$mergeWeights ) ) )
+  cellPred( allocMods[[beh]], column$var, lv, column$holdVar, column$holdLevel ) ) )
 
 allocRaw <- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
-  rawPred( d2[[beh]][ d2[[column$var]] == lv ] ) ) )
+  rawPred( d2[[beh]][ d2[[column$var]] == lv & d2[[column$holdVar]] == column$holdLevel ] ) ) )
 
 for( j in seq_along(allocColumns) ) {
-  cat( "\nPlotted values, split by", allocColumns[[j]]$title, "\n" )
+  cat( "\nPlotted values, split by", allocColumns[[j]]$title, "- holding",
+       allocColumns[[j]]$holdVar, "at", allocColumns[[j]]$holdLevel, "\n" )
   print( data.frame( allocFitted[[j]][,1:2], round(allocFitted[[j]][,-(1:2)], 3) ), row.names = FALSE )
 }
 
@@ -267,17 +270,7 @@ drawNestedAxis <- function( column ) {
   segments( barXLim[1], 1, barXLim[2], 1 )
 }
 
-# Panel titles (e.g. "Bad sweets") are set to the same size as the column
-# headers (e.g. "Economic cost") they sit below.
 panelTitleCex <- 1
-
-# Only the left column carries a y-axis, so its margin is wider than the
-# right column's. layout() gives both columns equal device width by default,
-# which would then leave their plot areas (device width minus margin)
-# unequal widths, so instead its column widths are set to make the two plot
-# areas -- and so both sets of bars -- come out equal: each column gets the
-# same shared plot width plus its own margin, margins converted from lines
-# to inches via par("csi").
 colMargins <- list( c(3, .6), c(.6, .6) )
 
 drawAllocFigure <- function( showRaw ) {
@@ -468,6 +461,39 @@ write.csv(compact_good, "OR_table_reward.csv", row.names = FALSE)
 
 ######################## Spline model plot of public/private against age
 
+# Age-specific contrasts between the anonymity conditions, from the spline models
+# below. The rows by year ask whether there is an anonymity effect at that age.
+# Since these are also sensitive to how precision varies across the age range,
+# the final row compares the contrast in middle childhood with that in the oldest
+# children, which tests directly whether the effect weakens with age.
+
+# Design-matrix row for one age, differenced across the two anonymity
+# conditions. Cost is set only for models that contain it.
+anonGap <- function( mod, ag, cost = "N" ) {
+  nd <- data.frame( AgeCentred = ag - meanAge,
+                    Condition = factor( c("Private","Public"), levels = mod$xlevels$Condition ) )
+  if( !is.null(mod$xlevels$Cost) ) nd$Cost <- factor( cost, levels = mod$xlevels$Cost )
+  X <- model.matrix( delete.response(terms(mod)), nd )
+  X["2",] - X["1",]
+}
+
+contrastTest <- function( mod, v, label ) {
+  est <- sum( v * coef(mod) )
+  se  <- sqrt( drop( t(v) %*% vcov(mod) %*% v ) )
+  data.frame( contrast = label, OR = exp(est),
+              ci95l = exp(est - critval*se), ci95u = exp(est + critval*se),
+              z = est/se, p = 2*pnorm(-abs(est/se)) )
+}
+
+gapTable <- function( mod ) {
+  rows <- c(
+    lapply( 4:10, function(ag) contrastTest( mod, anonGap(mod,ag), paste("age", ag) ) ),
+    list( contrastTest( mod, anonGap(mod,6.5) - anonGap(mod,9.5), "gap at 6.5 vs at 9.5" ) ) )
+  out <- do.call( rbind, rows )
+  out[,2:6] <- round( out[,2:6], 3 )
+  out
+}
+
 png("splineFig2.png", width = 5, height = 5, units = "in", res = 300)
 
 # Create knot locations based on centered age
@@ -501,12 +527,20 @@ plotTwoPointsGreenRed('AntiPunNum', 'AntiPunNum',
 
 mtext("Age (years)", side=1, line=2) 
 mtext("Proportion participants punishing antisocial actor", side=2, line=2) 
-legend(7.1, .25, legend=c("Anonymous", "In person"), 
-    col=c(niceGreen, "Red"), 
-    lty=c("solid", "longdash"), 
+legend(7.1, .25, legend=c("Anonymous", "In person"),
+    col=c(niceGreen, "Red"),
+    lty=c("solid", "longdash"),
     lwd=c(2, 2))
 
 dev.off()
+
+modKnotNoInt <- glm(AntiPun ~ Condition + ns(AgeCentred, knots=knotLoc) + Cost,
+    data=d2, family="binomial")
+cat("\nAntiPun: anonymity x age interaction block\n")
+print(anova(modKnotNoInt, modKnot, test="Chisq"))
+
+cat("\nAntiPun: anonymity contrast (OR in person vs anonymous), free of economic cost\n")
+print(gapTable(modKnot), row.names = FALSE)
 
 ############################## Investigating rewarding of antisocial actor
 
@@ -554,6 +588,13 @@ mtext("Proportion participants rewarding antisocial actor", side=2, line=2)
 legend(6, 1, legend=c("In person", "Anonymous"), col=c("Red", niceGreen), lty=c("solid", "longdash"), lwd=c(2, 2))
 dev.off()
 
+AntiGoodModCondAgeNoInt <- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc),
+                               data=d2, family="binomial")
+cat("\nAntiGood: anonymity x age interaction block, spline age\n")
+print(anova(AntiGoodModCondAgeNoInt, AntiGoodModCondAge, test="Chisq"))
+cat("\nAntiGood: anonymity contrast (OR in person vs anonymous), spline model\n")
+print(gapTable(AntiGoodModCondAge), row.names = FALSE)
+
   
 AntiGoodModSexAge <- glm(AntiGood~Sex+AgeCentred+Sex:AgeCentred, data=d2, family="binomial")
 summary(AntiGoodModSexAge)
@@ -586,8 +627,10 @@ length(subset(d2UrbPrivN,Age>=min(d2Rural$Age) & Age<=max(d2Rural$Age))$Age)
 
 tagNearest <- function(x) {
   d2UrbPrivN$diff <<- abs(d2UrbPrivN$Age - x)
-  d2UrbPrivN$tagged[which(d2UrbPrivN$diff==min(subset(d2UrbPrivN, tagged==FALSE)$diff) & d2UrbPrivN$tagged == FALSE)[1]]<<-TRUE
-  diffList <<- append( diffList, min(subset(d2UrbPrivN, tagged==FALSE)$diff))
+  # Taken before tagging, so it is the distance to the child actually matched.
+  nearest <- min(subset(d2UrbPrivN, tagged==FALSE)$diff)
+  d2UrbPrivN$tagged[which(d2UrbPrivN$diff==nearest & d2UrbPrivN$tagged == FALSE)[1]]<<-TRUE
+  diffList <<- append( diffList, nearest )
 }
 
 sampleAgain <- function() {
@@ -762,14 +805,17 @@ cat("\nSex (n =", n_Sex1, "/", n_Sex2, "):\n")
 print(binary_mde(n_Sex1, n_Sex2))
 
 # ── Age (continuous) ──────────────────────────────────────────────────────────
-# pwr.r.test returns minimum detectable correlation r
-# Convert to OR per SD via logistic approximation, then to OR per year
+# pwr.r.test returns the minimum detectable correlation r, read here as the
+# point-biserial correlation between age and the binary behaviour. Convert to
+# Cohen's d, then to OR per SD via the logistic approximation, then to OR per year.
 
 r      <- pwr.r.test(n = n_total, sig.level = 0.05, power = 0.80)$r
-OR_sd  <- exp(r * pi / sqrt(3))          # OR per SD of age
+d      <- 2 * r / sqrt(1 - r^2)          # point-biserial r to Cohen's d
+OR_sd  <- exp(d * pi / sqrt(3))          # OR per SD of age
 OR_yr  <- OR_sd ^ (1 / age_sd)           # OR per year
 
 cat("\nAge (n =", n_total, "):\n")
+cat("r =", round(r, 3), " d =", round(d, 3), " OR per SD =", round(OR_sd, 3), "\n")
 cat("OR per year =", round(OR_yr, 3), "\n")
 
 #####################################
