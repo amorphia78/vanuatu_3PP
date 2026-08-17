@@ -462,10 +462,7 @@ write.csv(compact_good, "OR_table_reward.csv", row.names = FALSE)
 ######################## Spline model plot of public/private against age
 
 # Age-specific contrasts between the anonymity conditions, from the spline models
-# below. The rows by year ask whether there is an anonymity effect at that age.
-# Since these are also sensitive to how precision varies across the age range,
-# the final row compares the contrast in middle childhood with that in the oldest
-# children, which tests directly whether the effect weakens with age.
+# below: is there an anonymity effect at each year of age?
 
 # Design-matrix row for one age, differenced across the two anonymity
 # conditions. Cost is set only for models that contain it.
@@ -486,15 +483,13 @@ contrastTest <- function( mod, v, label ) {
 }
 
 gapTable <- function( mod ) {
-  rows <- c(
-    lapply( 4:10, function(ag) contrastTest( mod, anonGap(mod,ag), paste("age", ag) ) ),
-    list( contrastTest( mod, anonGap(mod,6.5) - anonGap(mod,9.5), "gap at 6.5 vs at 9.5" ) ) )
-  out <- do.call( rbind, rows )
+  out <- do.call( rbind,
+    lapply( 4:10, function(ag) contrastTest( mod, anonGap(mod,ag), paste("age", ag) ) ) )
   out[,2:6] <- round( out[,2:6], 3 )
   out
 }
 
-png("splineFig2.png", width = 5, height = 5, units = "in", res = 300)
+png("figure3.png", width = 5, height = 5, units = "in", res = 300)
 
 # Create knot locations based on centered age
 knotLoc <- quantile(d2$AgeCentred, probs=c(1/3, 2/3))
@@ -579,7 +574,7 @@ preddat2 <- data.frame(
     Age = seq(4, 10, length = 100),
     Condition = rep("Public", 100) 
 )
-png("splineFig3a.png", width = 5, height = 5, units = "in", res = 300)
+png("figure4a.png", width = 5, height = 5, units = "in", res = 300)
 plotTwoGreenRed(AntiGoodModCondAge, AntiGoodModCondAge, preddat1, preddat2)
 plotTwoPointsGreenRed('AntiGoodNum', 'AntiGoodNum', 'd2$Condition=="Private"', 'd2$Condition=="Public"')
 mtext("(a)",at=4,line=.5) 
@@ -608,7 +603,7 @@ preddat2 <- data.frame(
     Age = seq(4, 10, length = 100),
     Sex = rep("M",100) 
 )
-png("splineFig3b.png", width = 5, height = 5, units = "in", res = 300)
+png("figure4b.png", width = 5, height = 5, units = "in", res = 300)
 plotTwoGreenRed(AntiGoodModSexAge,AntiGoodModSexAge,preddat1,preddat2)
 plotTwoPointsGreenRed('AntiGoodNum','AntiGoodNum','d2$Sex=="F"','d2$Sex=="M"' )
 mtext("(b)",at=4,line=.5) 

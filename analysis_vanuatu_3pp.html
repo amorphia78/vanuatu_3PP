@@ -11,7 +11,7 @@
 
 <meta name="author" content="Anon For Peer Review" />
 
-<meta name="date" content="2026-08-12" />
+<meta name="date" content="2026-08-17" />
 
 <title>analysis_vanuatu_3pp.R</title>
 
@@ -353,7 +353,7 @@ display: none;
 
 <h1 class="title toc-ignore">analysis_vanuatu_3pp.R</h1>
 <h4 class="author">Anon For Peer Review</h4>
-<h4 class="date">2026-08-12</h4>
+<h4 class="date">2026-08-17</h4>
 
 </div>
 
@@ -365,7 +365,6 @@ setwd_vanuatu_3pp()
 library(splines)
 library(sandwich)
 library(lmtest)
-library(marginaleffects)
 
 d2 &lt;- read.table(&quot;data_vanuatu_3pp.tsv&quot;, sep=&quot;\t&quot;, fill=T, head=T, na.strings=&quot;*&quot;)
 d2$AntiPun &lt;- as.factor(ifelse(d2$AntiGot == &quot;Bad&quot;, &quot;Y&quot;, &quot;N&quot;))
@@ -406,7 +405,7 @@ plotPropWithConf &lt;- function(model, predData, colour, alphaF=.1,lineType=&#39
   topOfPoly &lt;- data.frame( x = predData$Age, y = upr2 )
   topOfPoly &lt;- topOfPoly[order(topOfPoly$x),]
   bottomOfPoly &lt;- data.frame( x = predData$Age, y = lwr2 )
-  bottomOfPoly &lt;- bottomOfPoly[order(-topOfPoly$x),]
+  bottomOfPoly &lt;- bottomOfPoly[order(-bottomOfPoly$x),]
   polygon(x=c(topOfPoly$x,bottomOfPoly$x), y=c(topOfPoly$y,bottomOfPoly$y),col=adjustcolor(colour,alpha.f=alphaF),border=NA)
   lines(x=predData$Age,y=fit2, col=colour, lwd=2, lty=lineType)
   lines(x=predData$Age,y=upr2, col=colour, lty=&quot;dotted&quot;)
@@ -438,10 +437,22 @@ plotTwoPointsGreenRed &lt;- function( DVGreen, DVRed, whichDatGreen, whichDatRed
   }
 }
 
-########################################### Output participant age table for methods section
+########################################### Output participant descriptives and age table for methods section
 
-ages &lt;- seq(4,10,by=1)
 ur &lt;- subset( d2, Location == &quot;Urban&quot;)
+rur &lt;- subset( d2, Location == &quot;Rural&quot;)
+
+describeSample &lt;- function( dat ) data.frame(
+  n = nrow(dat), meanAge = round(mean(dat$Age), 2), sdAge = round(sd(dat$Age), 2),
+  minAge = round(min(dat$Age), 2), maxAge = round(max(dat$Age), 2),
+  girls = sum(dat$Sex == &quot;F&quot;), boys = sum(dat$Sex == &quot;M&quot;) )
+
+rbind( All = describeSample(d2), Urban = describeSample(ur), Rural = describeSample(rur) )</code></pre>
+<pre><code>##         n meanAge sdAge minAge maxAge girls boys
+## All   303    7.00  1.64   4.15  10.91   155  148
+## Urban 282    6.98  1.67   4.15  10.91   145  137
+## Rural  21    7.26  1.14   5.52   9.87    10   11</code></pre>
+<pre class="r"><code>ages &lt;- seq(4,10,by=1)
 tableAges &lt;- data.frame(
   Age = ages,
   FreePub = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == &quot;N&quot; &amp; ur$Condition == &quot;Public&quot; &amp; floor(ur$Age)==x])),
@@ -462,8 +473,7 @@ tableAges</code></pre>
 <pre><code>## [1] 282</code></pre>
 <pre class="r"><code>length(d2[,1])</code></pre>
 <pre><code>## [1] 303</code></pre>
-<pre class="r"><code>rur &lt;- subset( d2, Location == &quot;Rural&quot;)
-table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))</code></pre>
+<pre class="r"><code>table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))</code></pre>
 <pre><code>## 
 ##   [4,5)   [5,6)   [6,7)   [7,8)   [8,9)  [9,10) [10,11] 
 ##       0       1       9       6       2       3       0</code></pre>
@@ -533,33 +543,31 @@ punTabAge6Plus</code></pre>
 <pre class="r"><code>########################################### Allocation figure (Figure 2, and its supplementary version)
 
 # Each allocation is modelled from the two experimental factors plus age, and
-# plotted at the median age. The figure gives each experimental factor its own
-# column so that a pair of bars carries only one factor. Predictions for a
-# column are therefore averaged over the levels of the other factor, weighted
-# by how participants divide between them: a predictive margin (Graubard &amp;
-# Korn, 1999, Biometrics 55:652-659). avg_predictions() performs that
-# averaging and its delta-method standard error on the probability scale; the
-# SE is moved to the logit scale before the interval is formed so that the
-# interval cannot fall outside (0,1).
+# plotted at the median age. Each column of the figure varies one experimental
+# factor and holds the other at a reference level: the anonymity column is free
+# of economic cost, the economic cost column is anonymous. Every bar is
+# therefore a prediction for a design cell children were tested in, and the
+# anonymous free-of-cost cell is common to both columns.
 
 ageForFig &lt;- median(d2$Age)
-allocMods &lt;- lapply( behaviours, function(beh)
+cat( &quot;\nMedian age, at which figure predictions are made:&quot;, round(ageForFig, 3), &quot;\n&quot; )</code></pre>
+<pre><code>## 
+## Median age, at which figure predictions are made: 6.625</code></pre>
+<pre class="r"><code>allocMods &lt;- lapply( behaviours, function(beh)
   glm(as.formula(paste(beh,&quot;~Condition+Cost+Age&quot;)), data=d2, family=&quot;binomial&quot;) )
 names(allocMods) &lt;- behaviours
 
-marginalPred &lt;- function( model, splitVar, splitLevel, mergeVar, mergeWeights ) {
-  grid &lt;- data.frame( Age = rep(ageForFig, length(mergeWeights)) )
+cellPred &lt;- function( model, splitVar, splitLevel, holdVar, holdLevel ) {
+  grid &lt;- data.frame( Age = ageForFig )
   grid[[splitVar]] &lt;- splitLevel
-  grid[[mergeVar]] &lt;- names(mergeWeights)
-  grid$predWeight &lt;- as.vector(mergeWeights)
-  pred &lt;- avg_predictions( model, newdata = grid, by = splitVar, wts = &quot;predWeight&quot; )
-  seLogit &lt;- pred$std.error / ( pred$estimate * (1 - pred$estimate) )
-  data.frame( prop = pred$estimate,
-              ci95l = plogis( qlogis(pred$estimate) - critval*seLogit ),
-              ci95u = plogis( qlogis(pred$estimate) + critval*seLogit ) )
+  grid[[holdVar]] &lt;- holdLevel
+  pred &lt;- predict( model, newdata = grid, type = &quot;link&quot;, se.fit = TRUE )
+  data.frame( prop  = model$family$linkinv( pred$fit ),
+              ci95l = model$family$linkinv( pred$fit - critval * pred$se.fit ),
+              ci95u = model$family$linkinv( pred$fit + critval * pred$se.fit ) )
 }
 
-# Observed proportions for the same cells, shown alongside the fit in the
+# Observed proportions for the same design cells, shown alongside the fit in the
 # supplementary version of the figure. Note these pool over age, whereas the
 # fitted bars hold it at the median.
 rawPred &lt;- function( responses ) {
@@ -569,16 +577,14 @@ rawPred &lt;- function( responses ) {
 
 # One column per experimental factor, one row per allocation. Bars within a
 # row run antisocial agent then neutral, each split by the column&#39;s factor.
-# Both columns&#39; axis labels share one font size, also used for the &quot;...agent&quot;
-# labels below them.
 axisLabelCex &lt;- .8
 allocColumns &lt;- list(
   list( var = &quot;Condition&quot;, levels = c(&quot;Private&quot;,&quot;Public&quot;), title = &quot;Anonymity&quot;,
         tickLabels = c(&quot;Anonymous&quot;,&quot;In person&quot;), tickCex = axisLabelCex,
-        mergeVar = &quot;Cost&quot;, mergeWeights = table(d2$Cost) / nrow(d2) ),
+        holdVar = &quot;Cost&quot;, holdLevel = &quot;N&quot; ),
   list( var = &quot;Cost&quot;, levels = c(&quot;N&quot;,&quot;Y&quot;), title = &quot;Economic cost&quot;,
         tickLabels = c(&quot;Free&quot;,&quot;Econ. cost&quot;), tickCex = axisLabelCex,
-        mergeVar = &quot;Condition&quot;, mergeWeights = table(d2$Condition) / nrow(d2) )
+        holdVar = &quot;Condition&quot;, holdLevel = &quot;Private&quot; )
 )
 
 allocRows &lt;- list(
@@ -594,45 +600,46 @@ predTable &lt;- function( column, predFn ) stackRows( lapply( behaviours, functi
     data.frame( behav = beh, level = lv, predFn(beh, lv) ) ) ) ) )
 
 allocFitted &lt;- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
-  marginalPred( allocMods[[beh]], column$var, lv, column$mergeVar, column$mergeWeights ) ) )
+  cellPred( allocMods[[beh]], column$var, lv, column$holdVar, column$holdLevel ) ) )
 
 allocRaw &lt;- lapply( allocColumns, function(column) predTable( column, function(beh, lv)
-  rawPred( d2[[beh]][ d2[[column$var]] == lv ] ) ) )
+  rawPred( d2[[beh]][ d2[[column$var]] == lv &amp; d2[[column$holdVar]] == column$holdLevel ] ) ) )
 
 for( j in seq_along(allocColumns) ) {
-  cat( &quot;\nPlotted values, split by&quot;, allocColumns[[j]]$title, &quot;\n&quot; )
+  cat( &quot;\nPlotted values, split by&quot;, allocColumns[[j]]$title, &quot;- holding&quot;,
+       allocColumns[[j]]$holdVar, &quot;at&quot;, allocColumns[[j]]$holdLevel, &quot;\n&quot; )
   print( data.frame( allocFitted[[j]][,1:2], round(allocFitted[[j]][,-(1:2)], 3) ), row.names = FALSE )
 }</code></pre>
 <pre><code>## 
-## Plotted values, split by Anonymity 
+## Plotted values, split by Anonymity - holding Cost at N 
 ##      behav   level  prop ci95l ci95u
-##    AntiPun Private 0.532 0.455 0.609
-##    AntiPun  Public 0.359 0.277 0.450
-##    NeutPun Private 0.122 0.081 0.181
-##    NeutPun  Public 0.112 0.067 0.181
-##  AntiEmpty Private 0.160 0.115 0.218
-##  AntiEmpty  Public 0.163 0.112 0.231
-##  NeutEmpty Private 0.107 0.068 0.164
-##  NeutEmpty  Public 0.176 0.118 0.254
-##   AntiGood Private 0.298 0.233 0.373
-##   AntiGood  Public 0.469 0.381 0.560
-##   NeutGood Private 0.761 0.690 0.820
-##   NeutGood  Public 0.700 0.613 0.775
+##    AntiPun Private 0.565 0.481 0.645
+##    AntiPun  Public 0.386 0.297 0.484
+##    NeutPun Private 0.128 0.083 0.193
+##    NeutPun  Public 0.118 0.069 0.194
+##  AntiEmpty Private 0.106 0.067 0.163
+##  AntiEmpty  Public 0.108 0.064 0.176
+##  NeutEmpty Private 0.088 0.053 0.142
+##  NeutEmpty  Public 0.149 0.094 0.228
+##   AntiGood Private 0.321 0.249 0.403
+##   AntiGood  Public 0.500 0.403 0.597
+##   NeutGood Private 0.780 0.707 0.839
+##   NeutGood  Public 0.722 0.630 0.798
 ## 
-## Plotted values, split by Economic cost 
+## Plotted values, split by Economic cost - holding Condition at Private 
 ##      behav level  prop ci95l ci95u
-##    AntiPun     N 0.489 0.424 0.555
-##    AntiPun     Y 0.288 0.165 0.452
-##    NeutPun     N 0.124 0.087 0.173
-##    NeutPun     Y 0.084 0.031 0.209
-##  AntiEmpty     N 0.107 0.073 0.154
-##  AntiEmpty     Y 0.473 0.325 0.627
-##  NeutEmpty     N 0.114 0.079 0.161
-##  NeutEmpty     Y 0.262 0.153 0.412
-##   AntiGood     N 0.396 0.335 0.462
-##   AntiGood     Y 0.222 0.128 0.356
-##   NeutGood     N 0.755 0.696 0.806
-##   NeutGood     Y 0.620 0.468 0.752</code></pre>
+##    AntiPun     N 0.565 0.481 0.645
+##    AntiPun     Y 0.348 0.200 0.533
+##    NeutPun     N 0.128 0.083 0.193
+##    NeutPun     Y 0.087 0.031 0.224
+##  AntiEmpty     N 0.106 0.067 0.163
+##  AntiEmpty     Y 0.470 0.306 0.642
+##  NeutEmpty     N 0.088 0.053 0.142
+##  NeutEmpty     Y 0.213 0.110 0.372
+##   AntiGood     N 0.321 0.249 0.403
+##   AntiGood     Y 0.167 0.087 0.295
+##   NeutGood     N 0.780 0.707 0.839
+##   NeutGood     Y 0.652 0.487 0.787</code></pre>
 <pre class="r"><code>########################################### Drawing the allocation figure
 
 barXs &lt;- 1:4
@@ -687,17 +694,7 @@ drawNestedAxis &lt;- function( column ) {
   segments( barXLim[1], 1, barXLim[2], 1 )
 }
 
-# Panel titles (e.g. &quot;Bad sweets&quot;) are set to the same size as the column
-# headers (e.g. &quot;Economic cost&quot;) they sit below.
 panelTitleCex &lt;- 1
-
-# Only the left column carries a y-axis, so its margin is wider than the
-# right column&#39;s. layout() gives both columns equal device width by default,
-# which would then leave their plot areas (device width minus margin)
-# unequal widths, so instead its column widths are set to make the two plot
-# areas -- and so both sets of bars -- come out equal: each column gets the
-# same shared plot width plus its own margin, margins converted from lines
-# to inches via par(&quot;csi&quot;).
 colMargins &lt;- list( c(3, .6), c(.6, .6) )
 
 drawAllocFigure &lt;- function( showRaw ) {
@@ -1061,7 +1058,35 @@ write.csv(compact_good, &quot;OR_table_reward.csv&quot;, row.names = FALSE)
 
 ######################## Spline model plot of public/private against age
 
-png(&quot;splineFig2.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
+# Age-specific contrasts between the anonymity conditions, from the spline models
+# below: is there an anonymity effect at each year of age?
+
+# Design-matrix row for one age, differenced across the two anonymity
+# conditions. Cost is set only for models that contain it.
+anonGap &lt;- function( mod, ag, cost = &quot;N&quot; ) {
+  nd &lt;- data.frame( AgeCentred = ag - meanAge,
+                    Condition = factor( c(&quot;Private&quot;,&quot;Public&quot;), levels = mod$xlevels$Condition ) )
+  if( !is.null(mod$xlevels$Cost) ) nd$Cost &lt;- factor( cost, levels = mod$xlevels$Cost )
+  X &lt;- model.matrix( delete.response(terms(mod)), nd )
+  X[&quot;2&quot;,] - X[&quot;1&quot;,]
+}
+
+contrastTest &lt;- function( mod, v, label ) {
+  est &lt;- sum( v * coef(mod) )
+  se  &lt;- sqrt( drop( t(v) %*% vcov(mod) %*% v ) )
+  data.frame( contrast = label, OR = exp(est),
+              ci95l = exp(est - critval*se), ci95u = exp(est + critval*se),
+              z = est/se, p = 2*pnorm(-abs(est/se)) )
+}
+
+gapTable &lt;- function( mod ) {
+  out &lt;- do.call( rbind,
+    lapply( 4:10, function(ag) contrastTest( mod, anonGap(mod,ag), paste(&quot;age&quot;, ag) ) ) )
+  out[,2:6] &lt;- round( out[,2:6], 3 )
+  out
+}
+
+png(&quot;figure3.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
 
 # Create knot locations based on centered age
 knotLoc &lt;- quantile(d2$AgeCentred, probs=c(1/3, 2/3))
@@ -1120,14 +1145,40 @@ plotTwoPointsGreenRed(&#39;AntiPunNum&#39;, &#39;AntiPunNum&#39;,
 
 mtext(&quot;Age (years)&quot;, side=1, line=2) 
 mtext(&quot;Proportion participants punishing antisocial actor&quot;, side=2, line=2) 
-legend(7.1, .25, legend=c(&quot;Anonymous&quot;, &quot;In person&quot;), 
-    col=c(niceGreen, &quot;Red&quot;), 
-    lty=c(&quot;solid&quot;, &quot;longdash&quot;), 
+legend(7.1, .25, legend=c(&quot;Anonymous&quot;, &quot;In person&quot;),
+    col=c(niceGreen, &quot;Red&quot;),
+    lty=c(&quot;solid&quot;, &quot;longdash&quot;),
     lwd=c(2, 2))
 
 dev.off()</code></pre>
 <pre><code>## png 
 ##   2</code></pre>
+<pre class="r"><code>modKnotNoInt &lt;- glm(AntiPun ~ Condition + ns(AgeCentred, knots=knotLoc) + Cost,
+    data=d2, family=&quot;binomial&quot;)
+cat(&quot;\nAntiPun: anonymity x age interaction block\n&quot;)</code></pre>
+<pre><code>## 
+## AntiPun: anonymity x age interaction block</code></pre>
+<pre class="r"><code>print(anova(modKnotNoInt, modKnot, test=&quot;Chisq&quot;))</code></pre>
+<pre><code>## Analysis of Deviance Table
+## 
+## Model 1: AntiPun ~ Condition + ns(AgeCentred, knots = knotLoc) + Cost
+## Model 2: AntiPun ~ Condition + ns(AgeCentred, knots = knotLoc) + Condition:ns(AgeCentred, 
+##     knots = knotLoc) + Cost
+##   Resid. Df Resid. Dev Df Deviance Pr(&gt;Chi)
+## 1       297     373.05                     
+## 2       294     367.28  3   5.7752   0.1231</code></pre>
+<pre class="r"><code>cat(&quot;\nAntiPun: anonymity contrast (OR in person vs anonymous), free of economic cost\n&quot;)</code></pre>
+<pre><code>## 
+## AntiPun: anonymity contrast (OR in person vs anonymous), free of economic cost</code></pre>
+<pre class="r"><code>print(gapTable(modKnot), row.names = FALSE)</code></pre>
+<pre><code>##  contrast    OR ci95l  ci95u      z     p
+##     age 4 1.071 0.065 17.793  0.048 0.962
+##     age 5 0.358 0.115  1.117 -1.769 0.077
+##     age 6 0.223 0.095  0.523 -3.449 0.001
+##     age 7 0.422 0.202  0.878 -2.306 0.021
+##     age 8 0.946 0.361  2.475 -0.114 0.910
+##     age 9 1.115 0.477  2.607  0.251 0.801
+##    age 10 0.815 0.162  4.103 -0.248 0.804</code></pre>
 <pre class="r"><code>############################## Investigating rewarding of antisocial actor
 
 cat(&quot;Rewarded antisocial actor:&quot;,
@@ -1250,7 +1301,7 @@ preddat2 &lt;- data.frame(
     Age = seq(4, 10, length = 100),
     Condition = rep(&quot;Public&quot;, 100) 
 )
-png(&quot;splineFig3a.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
+png(&quot;figure4a.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
 plotTwoGreenRed(AntiGoodModCondAge, AntiGoodModCondAge, preddat1, preddat2)
 plotTwoPointsGreenRed(&#39;AntiGoodNum&#39;, &#39;AntiGoodNum&#39;, &#39;d2$Condition==&quot;Private&quot;&#39;, &#39;d2$Condition==&quot;Public&quot;&#39;)
 mtext(&quot;(a)&quot;,at=4,line=.5) 
@@ -1260,6 +1311,32 @@ legend(6, 1, legend=c(&quot;In person&quot;, &quot;Anonymous&quot;), col=c(&quot
 dev.off()</code></pre>
 <pre><code>## png 
 ##   2</code></pre>
+<pre class="r"><code>AntiGoodModCondAgeNoInt &lt;- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc),
+                               data=d2, family=&quot;binomial&quot;)
+cat(&quot;\nAntiGood: anonymity x age interaction block, spline age\n&quot;)</code></pre>
+<pre><code>## 
+## AntiGood: anonymity x age interaction block, spline age</code></pre>
+<pre class="r"><code>print(anova(AntiGoodModCondAgeNoInt, AntiGoodModCondAge, test=&quot;Chisq&quot;))</code></pre>
+<pre><code>## Analysis of Deviance Table
+## 
+## Model 1: AntiGood ~ Condition + ns(AgeCentred, knots = knotLoc)
+## Model 2: AntiGood ~ Condition + ns(AgeCentred, knots = knotLoc) + Condition:ns(AgeCentred, 
+##     knots = knotLoc)
+##   Resid. Df Resid. Dev Df Deviance Pr(&gt;Chi)
+## 1       298     364.91                     
+## 2       295     359.08  3   5.8298   0.1202</code></pre>
+<pre class="r"><code>cat(&quot;\nAntiGood: anonymity contrast (OR in person vs anonymous), spline model\n&quot;)</code></pre>
+<pre><code>## 
+## AntiGood: anonymity contrast (OR in person vs anonymous), spline model</code></pre>
+<pre class="r"><code>print(gapTable(AntiGoodModCondAge), row.names = FALSE)</code></pre>
+<pre><code>##  contrast    OR ci95l ci95u      z     p
+##     age 4 1.085 0.130 9.024  0.075 0.940
+##     age 5 2.721 1.139 6.500  2.252 0.024
+##     age 6 4.009 1.761 9.127  3.308 0.001
+##     age 7 2.277 1.067 4.856  2.128 0.033
+##     age 8 1.040 0.364 2.967  0.073 0.942
+##     age 9 0.737 0.273 1.988 -0.603 0.546
+##    age 10 0.728 0.090 5.916 -0.297 0.766</code></pre>
 <pre class="r"><code>AntiGoodModSexAge &lt;- glm(AntiGood~Sex+AgeCentred+Sex:AgeCentred, data=d2, family=&quot;binomial&quot;)
 summary(AntiGoodModSexAge)</code></pre>
 <pre><code>## 
@@ -1293,7 +1370,7 @@ preddat2 &lt;- data.frame(
     Age = seq(4, 10, length = 100),
     Sex = rep(&quot;M&quot;,100) 
 )
-png(&quot;splineFig3b.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
+png(&quot;figure4b.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
 plotTwoGreenRed(AntiGoodModSexAge,AntiGoodModSexAge,preddat1,preddat2)
 plotTwoPointsGreenRed(&#39;AntiGoodNum&#39;,&#39;AntiGoodNum&#39;,&#39;d2$Sex==&quot;F&quot;&#39;,&#39;d2$Sex==&quot;M&quot;&#39; )
 mtext(&quot;(b)&quot;,at=4,line=.5) 
@@ -1313,8 +1390,10 @@ length(subset(d2UrbPrivN,Age&gt;=min(d2Rural$Age) &amp; Age&lt;=max(d2Rural$Age)
 <pre><code>## [1] 94</code></pre>
 <pre class="r"><code>tagNearest &lt;- function(x) {
   d2UrbPrivN$diff &lt;&lt;- abs(d2UrbPrivN$Age - x)
-  d2UrbPrivN$tagged[which(d2UrbPrivN$diff==min(subset(d2UrbPrivN, tagged==FALSE)$diff) &amp; d2UrbPrivN$tagged == FALSE)[1]]&lt;&lt;-TRUE
-  diffList &lt;&lt;- append( diffList, min(subset(d2UrbPrivN, tagged==FALSE)$diff))
+  # Taken before tagging, so it is the distance to the child actually matched.
+  nearest &lt;- min(subset(d2UrbPrivN, tagged==FALSE)$diff)
+  d2UrbPrivN$tagged[which(d2UrbPrivN$diff==nearest &amp; d2UrbPrivN$tagged == FALSE)[1]]&lt;&lt;-TRUE
+  diffList &lt;&lt;- append( diffList, nearest )
 }
 
 sampleAgain &lt;- function() {
@@ -1332,19 +1411,19 @@ for(i in 1:4) {
 }</code></pre>
 <pre><code>## 1 21 7.262831 1.138761 5.522222 9.872222 
 ## 1 21 7.303042 1.192194 5.511111 9.863889 
-## 0.06865079 
+## 0.0489418 
 ## 
 ## 2 21 7.262831 1.138761 5.522222 9.872222 
 ## 2 42 7.280026 1.169447 5.5 9.883333 
-## 0.09193122 
+## 0.0728836 
 ## 
 ## 3 21 7.262831 1.138761 5.522222 9.872222 
 ## 3 63 7.286376 1.167636 5.5 9.883333 
-## 0.1380071 
+## 0.1092593 
 ## 
 ## 4 21 7.262831 1.138761 5.522222 9.872222 
 ## 4 84 7.251157 1.237708 5.5 9.883333 
-## 0.2465939</code></pre>
+## 0.2155754</code></pre>
 <pre class="r"><code># Function to extract proportion and CI from prop.test
 extract_prop_ci &lt;- function(outcome_var, sample_name) {
   counts &lt;- summary(outcome_var)
@@ -1529,18 +1608,22 @@ cat(&quot;=== Minimum detectable effect at 80% power, alpha = 0.05, p0 = 0.5 ===
 <pre><code>##     h    p1    OR 
 ## 0.322 0.658 1.930</code></pre>
 <pre class="r"><code># ── Age (continuous) ──────────────────────────────────────────────────────────
-# pwr.r.test returns minimum detectable correlation r
-# Convert to OR per SD via logistic approximation, then to OR per year
+# pwr.r.test returns the minimum detectable correlation r, read here as the
+# point-biserial correlation between age and the binary behaviour. Convert to
+# Cohen&#39;s d, then to OR per SD via the logistic approximation, then to OR per year.
 
 r      &lt;- pwr.r.test(n = n_total, sig.level = 0.05, power = 0.80)$r
-OR_sd  &lt;- exp(r * pi / sqrt(3))          # OR per SD of age
+d      &lt;- 2 * r / sqrt(1 - r^2)          # point-biserial r to Cohen&#39;s d
+OR_sd  &lt;- exp(d * pi / sqrt(3))          # OR per SD of age
 OR_yr  &lt;- OR_sd ^ (1 / age_sd)           # OR per year
 
 cat(&quot;\nAge (n =&quot;, n_total, &quot;):\n&quot;)</code></pre>
 <pre><code>## 
 ## Age (n = 303 ):</code></pre>
+<pre class="r"><code>cat(&quot;r =&quot;, round(r, 3), &quot; d =&quot;, round(d, 3), &quot; OR per SD =&quot;, round(OR_sd, 3), &quot;\n&quot;)</code></pre>
+<pre><code>## r = 0.16  d = 0.324  OR per SD = 1.801</code></pre>
 <pre class="r"><code>cat(&quot;OR per year =&quot;, round(OR_yr, 3), &quot;\n&quot;)</code></pre>
-<pre><code>## OR per year = 1.194</code></pre>
+<pre><code>## OR per year = 1.432</code></pre>
 <pre class="r"><code>#####################################
 # To produce R Markdown for this file
 
