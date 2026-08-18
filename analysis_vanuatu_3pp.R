@@ -163,10 +163,15 @@ allocMods <- lapply( behaviours, function(beh)
   glm(as.formula(paste(beh,"~Condition+Cost+Age")), data=d2, family="binomial") )
 names(allocMods) <- behaviours
 
+# Figure 2 shows the first three cells, each of which differs from the baseline
+# in one condition only, so its labels name just that condition. The
+# supplementary figure shows all four, so its labels name both conditions.
 allocCells <- data.frame(
   Condition = c("Private","Public","Private","Public"),
   Cost      = c("N","N","Y","Y"),
-  label     = c("Anonymous,\ncost free","In person","Econ. cost","In person,\necon. cost")
+  label     = c("Anonymous,\ncost free", "In person", "Econ. cost", "In person,\necon. cost"),
+  labelBoth = c("Anonymous,\ncost free", "In person,\ncost free",
+                "Anonymous,\necon. cost", "In person,\necon. cost")
 )
 mainCells <- 1:3   # the fourth cell is shown only in the supplementary figure
 
@@ -214,7 +219,7 @@ drawBars <- function( bars, centres, fill, halfWidth ) {
   arrows( centres, bars$ci95l, centres, bars$ci95u, angle = 90, code = 3, length = .025 )
 }
 
-drawAllocPanel <- function( row, j, rows, showRaw, showLegend, showYAxis, showXAxis ) {
+drawAllocPanel <- function( row, j, rows, labelCol, showRaw, showLegend, showYAxis, showXAxis ) {
   beh <- row$behavs[j]
   xs <- seq_along(rows)
   xLim <- c( 0.5, length(rows) + 0.5 )
@@ -242,7 +247,7 @@ drawAllocPanel <- function( row, j, rows, showRaw, showLegend, showYAxis, showXA
     mtext( "Probability", side = 2, line = 1.9, cex = .8 )
   }
   if( showXAxis )
-    axis( 1, at = xs, labels = allocCells$label[rows], tick = FALSE,
+    axis( 1, at = xs, labels = allocCells[[labelCol]][rows], tick = FALSE,
           cex.axis = axisLabelCex, padj = 1, line = -1.5 )
   box()
   # Sits high in the panel to clear the tallest interval, which in the neutral
@@ -258,7 +263,7 @@ outerTop <- 1.8
 colMargins <- list( c(3, .6), c(.6, .6) )   # left, right, per column
 rowMargins <- list( c(.6, .6), c(.6, .6), c(.6, 1.9) )   # top, bottom, per row
 
-drawAllocFigure <- function( rows, showRaw ) {
+drawAllocFigure <- function( rows, showRaw, labelCol ) {
   oldPar <- par( no.readonly = TRUE )
   on.exit( par(oldPar) )
   par( oma = c(0, 0, outerTop, 0) )
@@ -278,7 +283,7 @@ drawAllocFigure <- function( rows, showRaw ) {
                              rowMargins[[i]][1], colMargins[[j]][2] ) )
       # The legend sits in the antisocial column, whose bars run lower than the
       # neutral column's, leaving it room to clear the tallest bars.
-      drawAllocPanel( allocRows[[i]], j, rows, showRaw,
+      drawAllocPanel( allocRows[[i]], j, rows, labelCol, showRaw,
                       showLegend = showRaw && j == 1, showYAxis = j == 1,
                       showXAxis = i == length(allocRows) )
       # Column titles sit in the outer margin so that all rows stay equal height.
@@ -289,14 +294,14 @@ drawAllocFigure <- function( rows, showRaw ) {
 }
 
 png("figure2.png", width = 7, height = 7.5, units = "in", res = 300)
-drawAllocFigure( mainCells, showRaw = FALSE )
+drawAllocFigure( mainCells, showRaw = FALSE, labelCol = "label" )
 dev.off()
 
 # The supplementary version carries an extra cell, so it is drawn slightly
 # wider. The widest label line ("Anonymous,") is 0.72in, which at this width
 # leaves a 0.09in gap between neighbouring labels.
 png("supplementaryFigure.png", width = 7.5, height = 7.5, units = "in", res = 300)
-drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE )
+drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE, labelCol = "labelBoth" )
 dev.off()
 
 ######################################### Makes main model table
@@ -550,37 +555,42 @@ anova(mods2[["AntiGood"]],AntiGoodMod3,test="Chisq")
 
 
 
-# AntiGood by Condition and Age
+# AntiGood by Condition and Age. Specified as for the punishment model above:
+# economic cost is included, and lines and plotted points both describe the
+# free-of-economic-cost condition.
 knotLoc <- quantile(d2$AgeCentred, probs=c(1/3, 2/3))  # Use centered age for knots
-AntiGoodModCondAge <- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc) + 
-                          Condition:ns(AgeCentred, knots=knotLoc), 
+AntiGoodModCondAge <- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc) +
+                          Condition:ns(AgeCentred, knots=knotLoc) + Cost,
                           data=d2, family="binomial")
 summary(AntiGoodModCondAge)
 
-preddat1 <- data.frame( 
+preddat1 <- data.frame(
     AgeCentred = seq(4 - meanAge, 10 - meanAge, length = 100),
     Age = seq(4, 10, length = 100),
-    Condition = rep("Private", 100) 
+    Condition = rep("Private", 100),
+    Cost = rep("N", 100)
 )
-preddat2 <- data.frame( 
+preddat2 <- data.frame(
     AgeCentred = seq(4 - meanAge, 10 - meanAge, length = 100),
     Age = seq(4, 10, length = 100),
-    Condition = rep("Public", 100) 
+    Condition = rep("Public", 100),
+    Cost = rep("N", 100)
 )
 png("figure4a.png", width = 5, height = 5, units = "in", res = 300)
 plotTwoGreenRed(AntiGoodModCondAge, AntiGoodModCondAge, preddat1, preddat2)
-plotTwoPointsGreenRed('AntiGoodNum', 'AntiGoodNum', 'd2$Condition=="Private"', 'd2$Condition=="Public"')
-mtext("(a)",at=4,line=.5) 
-mtext("Age (years)", side=1, line=2) 
-mtext("Proportion participants rewarding antisocial actor", side=2, line=2) 
+plotTwoPointsGreenRed('AntiGoodNum', 'AntiGoodNum',
+    'd2$Condition=="Private" & d2$Cost == "N"', 'd2$Condition=="Public" & d2$Cost == "N"')
+mtext("(a)",at=4,line=.5)
+mtext("Age (years)", side=1, line=2)
+mtext("Proportion participants rewarding antisocial actor", side=2, line=2)
 legend(6, 1, legend=c("In person", "Anonymous"), col=c("Red", niceGreen), lty=c("solid", "longdash"), lwd=c(2, 2))
 dev.off()
 
-AntiGoodModCondAgeNoInt <- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc),
+AntiGoodModCondAgeNoInt <- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc) + Cost,
                                data=d2, family="binomial")
 cat("\nAntiGood: anonymity x age interaction block, spline age\n")
 print(anova(AntiGoodModCondAgeNoInt, AntiGoodModCondAge, test="Chisq"))
-cat("\nAntiGood: anonymity contrast (OR in person vs anonymous), spline model\n")
+cat("\nAntiGood: anonymity contrast (OR in person vs anonymous), free of economic cost\n")
 print(gapTable(AntiGoodModCondAge), row.names = FALSE)
 
   

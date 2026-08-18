@@ -558,10 +558,15 @@ cat( &quot;\nMedian age, at which figure predictions are made:&quot;, round(ageF
   glm(as.formula(paste(beh,&quot;~Condition+Cost+Age&quot;)), data=d2, family=&quot;binomial&quot;) )
 names(allocMods) &lt;- behaviours
 
+# Figure 2 shows the first three cells, each of which differs from the baseline
+# in one condition only, so its labels name just that condition. The
+# supplementary figure shows all four, so its labels name both conditions.
 allocCells &lt;- data.frame(
   Condition = c(&quot;Private&quot;,&quot;Public&quot;,&quot;Private&quot;,&quot;Public&quot;),
   Cost      = c(&quot;N&quot;,&quot;N&quot;,&quot;Y&quot;,&quot;Y&quot;),
-  label     = c(&quot;Anonymous,\ncost free&quot;,&quot;In person&quot;,&quot;Econ. cost&quot;,&quot;In person,\necon. cost&quot;)
+  label     = c(&quot;Anonymous,\ncost free&quot;, &quot;In person&quot;, &quot;Econ. cost&quot;, &quot;In person,\necon. cost&quot;),
+  labelBoth = c(&quot;Anonymous,\ncost free&quot;, &quot;In person,\ncost free&quot;,
+                &quot;Anonymous,\necon. cost&quot;, &quot;In person,\necon. cost&quot;)
 )
 mainCells &lt;- 1:3   # the fourth cell is shown only in the supplementary figure
 
@@ -635,7 +640,7 @@ drawBars &lt;- function( bars, centres, fill, halfWidth ) {
   arrows( centres, bars$ci95l, centres, bars$ci95u, angle = 90, code = 3, length = .025 )
 }
 
-drawAllocPanel &lt;- function( row, j, rows, showRaw, showLegend, showYAxis, showXAxis ) {
+drawAllocPanel &lt;- function( row, j, rows, labelCol, showRaw, showLegend, showYAxis, showXAxis ) {
   beh &lt;- row$behavs[j]
   xs &lt;- seq_along(rows)
   xLim &lt;- c( 0.5, length(rows) + 0.5 )
@@ -663,7 +668,7 @@ drawAllocPanel &lt;- function( row, j, rows, showRaw, showLegend, showYAxis, sho
     mtext( &quot;Probability&quot;, side = 2, line = 1.9, cex = .8 )
   }
   if( showXAxis )
-    axis( 1, at = xs, labels = allocCells$label[rows], tick = FALSE,
+    axis( 1, at = xs, labels = allocCells[[labelCol]][rows], tick = FALSE,
           cex.axis = axisLabelCex, padj = 1, line = -1.5 )
   box()
   # Sits high in the panel to clear the tallest interval, which in the neutral
@@ -679,7 +684,7 @@ outerTop &lt;- 1.8
 colMargins &lt;- list( c(3, .6), c(.6, .6) )   # left, right, per column
 rowMargins &lt;- list( c(.6, .6), c(.6, .6), c(.6, 1.9) )   # top, bottom, per row
 
-drawAllocFigure &lt;- function( rows, showRaw ) {
+drawAllocFigure &lt;- function( rows, showRaw, labelCol ) {
   oldPar &lt;- par( no.readonly = TRUE )
   on.exit( par(oldPar) )
   par( oma = c(0, 0, outerTop, 0) )
@@ -699,7 +704,7 @@ drawAllocFigure &lt;- function( rows, showRaw ) {
                              rowMargins[[i]][1], colMargins[[j]][2] ) )
       # The legend sits in the antisocial column, whose bars run lower than the
       # neutral column&#39;s, leaving it room to clear the tallest bars.
-      drawAllocPanel( allocRows[[i]], j, rows, showRaw,
+      drawAllocPanel( allocRows[[i]], j, rows, labelCol, showRaw,
                       showLegend = showRaw &amp;&amp; j == 1, showYAxis = j == 1,
                       showXAxis = i == length(allocRows) )
       # Column titles sit in the outer margin so that all rows stay equal height.
@@ -710,7 +715,7 @@ drawAllocFigure &lt;- function( rows, showRaw ) {
 }
 
 png(&quot;figure2.png&quot;, width = 7, height = 7.5, units = &quot;in&quot;, res = 300)
-drawAllocFigure( mainCells, showRaw = FALSE )
+drawAllocFigure( mainCells, showRaw = FALSE, labelCol = &quot;label&quot; )
 dev.off()</code></pre>
 <pre><code>## png 
 ##   2</code></pre>
@@ -718,7 +723,7 @@ dev.off()</code></pre>
 # wider. The widest label line (&quot;Anonymous,&quot;) is 0.72in, which at this width
 # leaves a 0.09in gap between neighbouring labels.
 png(&quot;supplementaryFigure.png&quot;, width = 7.5, height = 7.5, units = &quot;in&quot;, res = 300)
-drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE )
+drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE, labelCol = &quot;labelBoth&quot; )
 dev.off()</code></pre>
 <pre><code>## png 
 ##   2</code></pre>
@@ -1249,59 +1254,65 @@ cat(&quot;NeutPunY: OR =&quot;, round(OR_NeutPun, 2),
 ## 2       295     327.69  1    21.59 3.377e-06 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
-<pre class="r"><code># AntiGood by Condition and Age
+<pre class="r"><code># AntiGood by Condition and Age. Specified as for the punishment model above:
+# economic cost is included, and lines and plotted points both describe the
+# free-of-economic-cost condition.
 knotLoc &lt;- quantile(d2$AgeCentred, probs=c(1/3, 2/3))  # Use centered age for knots
-AntiGoodModCondAge &lt;- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc) + 
-                          Condition:ns(AgeCentred, knots=knotLoc), 
+AntiGoodModCondAge &lt;- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc) +
+                          Condition:ns(AgeCentred, knots=knotLoc) + Cost,
                           data=d2, family=&quot;binomial&quot;)
 summary(AntiGoodModCondAge)</code></pre>
 <pre><code>## 
 ## Call:
 ## glm(formula = AntiGood ~ Condition + ns(AgeCentred, knots = knotLoc) + 
-##     Condition:ns(AgeCentred, knots = knotLoc), family = &quot;binomial&quot;, 
+##     Condition:ns(AgeCentred, knots = knotLoc) + Cost, family = &quot;binomial&quot;, 
 ##     data = d2)
 ## 
 ## Coefficients:
-##                                                  Estimate Std. Error z value Pr(&gt;|z|)  
-## (Intercept)                                        0.4220     0.6098   0.692   0.4889  
-## ConditionPublic                                    0.2314     0.9616   0.241   0.8098  
-## ns(AgeCentred, knots = knotLoc)1                  -0.1066     0.8094  -0.132   0.8952  
-## ns(AgeCentred, knots = knotLoc)2                  -3.6630     1.5409  -2.377   0.0174 *
-## ns(AgeCentred, knots = knotLoc)3                  -1.6401     0.9778  -1.677   0.0935 .
-## ConditionPublic:ns(AgeCentred, knots = knotLoc)1  -1.4905     1.2914  -1.154   0.2484  
-## ConditionPublic:ns(AgeCentred, knots = knotLoc)2   0.9487     2.5269   0.375   0.7073  
-## ConditionPublic:ns(AgeCentred, knots = knotLoc)3  -1.3432     1.9211  -0.699   0.4844  
+##                                                  Estimate Std. Error z value Pr(&gt;|z|)   
+## (Intercept)                                        0.8311     0.6476   1.283  0.19936   
+## ConditionPublic                                    0.2366     0.9801   0.241  0.80927   
+## ns(AgeCentred, knots = knotLoc)1                  -0.4738     0.8200  -0.578  0.56338   
+## ns(AgeCentred, knots = knotLoc)2                  -4.2907     1.5962  -2.688  0.00719 **
+## ns(AgeCentred, knots = knotLoc)3                  -1.8412     0.9795  -1.880  0.06015 . 
+## CostY                                             -0.9721     0.4009  -2.425  0.01533 * 
+## ConditionPublic:ns(AgeCentred, knots = knotLoc)1  -1.6448     1.2984  -1.267  0.20523   
+## ConditionPublic:ns(AgeCentred, knots = knotLoc)2   1.1026     2.5578   0.431  0.66641   
+## ConditionPublic:ns(AgeCentred, knots = knotLoc)3  -1.3867     1.9091  -0.726  0.46762   
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## (Dispersion parameter for binomial family taken to be 1)
 ## 
 ##     Null deviance: 391.04  on 302  degrees of freedom
-## Residual deviance: 359.08  on 295  degrees of freedom
-## AIC: 375.08
+## Residual deviance: 352.79  on 294  degrees of freedom
+## AIC: 370.79
 ## 
 ## Number of Fisher Scoring iterations: 4</code></pre>
-<pre class="r"><code>preddat1 &lt;- data.frame( 
+<pre class="r"><code>preddat1 &lt;- data.frame(
     AgeCentred = seq(4 - meanAge, 10 - meanAge, length = 100),
     Age = seq(4, 10, length = 100),
-    Condition = rep(&quot;Private&quot;, 100) 
+    Condition = rep(&quot;Private&quot;, 100),
+    Cost = rep(&quot;N&quot;, 100)
 )
-preddat2 &lt;- data.frame( 
+preddat2 &lt;- data.frame(
     AgeCentred = seq(4 - meanAge, 10 - meanAge, length = 100),
     Age = seq(4, 10, length = 100),
-    Condition = rep(&quot;Public&quot;, 100) 
+    Condition = rep(&quot;Public&quot;, 100),
+    Cost = rep(&quot;N&quot;, 100)
 )
 png(&quot;figure4a.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
 plotTwoGreenRed(AntiGoodModCondAge, AntiGoodModCondAge, preddat1, preddat2)
-plotTwoPointsGreenRed(&#39;AntiGoodNum&#39;, &#39;AntiGoodNum&#39;, &#39;d2$Condition==&quot;Private&quot;&#39;, &#39;d2$Condition==&quot;Public&quot;&#39;)
-mtext(&quot;(a)&quot;,at=4,line=.5) 
-mtext(&quot;Age (years)&quot;, side=1, line=2) 
-mtext(&quot;Proportion participants rewarding antisocial actor&quot;, side=2, line=2) 
+plotTwoPointsGreenRed(&#39;AntiGoodNum&#39;, &#39;AntiGoodNum&#39;,
+    &#39;d2$Condition==&quot;Private&quot; &amp; d2$Cost == &quot;N&quot;&#39;, &#39;d2$Condition==&quot;Public&quot; &amp; d2$Cost == &quot;N&quot;&#39;)
+mtext(&quot;(a)&quot;,at=4,line=.5)
+mtext(&quot;Age (years)&quot;, side=1, line=2)
+mtext(&quot;Proportion participants rewarding antisocial actor&quot;, side=2, line=2)
 legend(6, 1, legend=c(&quot;In person&quot;, &quot;Anonymous&quot;), col=c(&quot;Red&quot;, niceGreen), lty=c(&quot;solid&quot;, &quot;longdash&quot;), lwd=c(2, 2))
 dev.off()</code></pre>
 <pre><code>## png 
 ##   2</code></pre>
-<pre class="r"><code>AntiGoodModCondAgeNoInt &lt;- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc),
+<pre class="r"><code>AntiGoodModCondAgeNoInt &lt;- glm(AntiGood ~ Condition + ns(AgeCentred, knots=knotLoc) + Cost,
                                data=d2, family=&quot;binomial&quot;)
 cat(&quot;\nAntiGood: anonymity x age interaction block, spline age\n&quot;)</code></pre>
 <pre><code>## 
@@ -1309,24 +1320,26 @@ cat(&quot;\nAntiGood: anonymity x age interaction block, spline age\n&quot;)</co
 <pre class="r"><code>print(anova(AntiGoodModCondAgeNoInt, AntiGoodModCondAge, test=&quot;Chisq&quot;))</code></pre>
 <pre><code>## Analysis of Deviance Table
 ## 
-## Model 1: AntiGood ~ Condition + ns(AgeCentred, knots = knotLoc)
+## Model 1: AntiGood ~ Condition + ns(AgeCentred, knots = knotLoc) + Cost
 ## Model 2: AntiGood ~ Condition + ns(AgeCentred, knots = knotLoc) + Condition:ns(AgeCentred, 
-##     knots = knotLoc)
-##   Resid. Df Resid. Dev Df Deviance Pr(&gt;Chi)
-## 1       298     364.91                     
-## 2       295     359.08  3   5.8298   0.1202</code></pre>
-<pre class="r"><code>cat(&quot;\nAntiGood: anonymity contrast (OR in person vs anonymous), spline model\n&quot;)</code></pre>
+##     knots = knotLoc) + Cost
+##   Resid. Df Resid. Dev Df Deviance Pr(&gt;Chi)  
+## 1       297     359.46                       
+## 2       294     352.79  3   6.6712  0.08315 .
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code>cat(&quot;\nAntiGood: anonymity contrast (OR in person vs anonymous), free of economic cost\n&quot;)</code></pre>
 <pre><code>## 
-## AntiGood: anonymity contrast (OR in person vs anonymous), spline model</code></pre>
+## AntiGood: anonymity contrast (OR in person vs anonymous), free of economic cost</code></pre>
 <pre class="r"><code>print(gapTable(AntiGoodModCondAge), row.names = FALSE)</code></pre>
-<pre><code>##  contrast    OR ci95l ci95u      z     p
-##     age 4 1.085 0.130 9.024  0.075 0.940
-##     age 5 2.721 1.139 6.500  2.252 0.024
-##     age 6 4.009 1.761 9.127  3.308 0.001
-##     age 7 2.277 1.067 4.856  2.128 0.033
-##     age 8 1.040 0.364 2.967  0.073 0.942
-##     age 9 0.737 0.273 1.988 -0.603 0.546
-##    age 10 0.728 0.090 5.916 -0.297 0.766</code></pre>
+<pre><code>##  contrast    OR ci95l  ci95u      z     p
+##     age 4 1.073 0.124  9.294  0.064 0.949
+##     age 5 2.960 1.209  7.245  2.376 0.017
+##     age 6 4.539 1.946 10.588  3.500 0.000
+##     age 7 2.434 1.134  5.224  2.282 0.022
+##     age 8 1.035 0.363  2.952  0.064 0.949
+##     age 9 0.724 0.268  1.953 -0.639 0.523
+##    age 10 0.736 0.092  5.901 -0.288 0.773</code></pre>
 <pre class="r"><code>AntiGoodModSexAge &lt;- glm(AntiGood~Sex+AgeCentred+Sex:AgeCentred, data=d2, family=&quot;binomial&quot;)
 summary(AntiGoodModSexAge)</code></pre>
 <pre><code>## 
