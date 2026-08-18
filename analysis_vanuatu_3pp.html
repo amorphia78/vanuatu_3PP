@@ -11,7 +11,7 @@
 
 <meta name="author" content="Anon For Peer Review" />
 
-<meta name="date" content="2026-08-17" />
+<meta name="date" content="2026-08-18" />
 
 <title>analysis_vanuatu_3pp.R</title>
 
@@ -353,7 +353,7 @@ display: none;
 
 <h1 class="title toc-ignore">analysis_vanuatu_3pp.R</h1>
 <h4 class="author">Anon For Peer Review</h4>
-<h4 class="date">2026-08-17</h4>
+<h4 class="date">2026-08-18</h4>
 
 </div>
 
@@ -361,6 +361,10 @@ display: none;
 <pre class="r"><code># To run at the command line, replace this with a function that calls setwd()
 # to the local directory where you have the data and R files.
 setwd_vanuatu_3pp()
+
+# Everything this script writes (figures and tables) goes in this subfolder.
+outDir &lt;- &quot;output&quot;
+dir.create(outDir, showWarnings = FALSE)
 
 library(splines)
 library(sandwich)
@@ -714,7 +718,7 @@ drawAllocFigure &lt;- function( rows, showRaw, labelCol ) {
   }
 }
 
-png(&quot;figure2.png&quot;, width = 7, height = 7.5, units = &quot;in&quot;, res = 300)
+png(file.path(outDir, &quot;figure2.png&quot;), width = 7, height = 7.5, units = &quot;in&quot;, res = 300)
 drawAllocFigure( mainCells, showRaw = FALSE, labelCol = &quot;label&quot; )
 dev.off()</code></pre>
 <pre><code>## png 
@@ -722,7 +726,7 @@ dev.off()</code></pre>
 <pre class="r"><code># The supplementary version carries an extra cell, so it is drawn slightly
 # wider. The widest label line (&quot;Anonymous,&quot;) is 0.72in, which at this width
 # leaves a 0.09in gap between neighbouring labels.
-png(&quot;supplementaryFigure.png&quot;, width = 7.5, height = 7.5, units = &quot;in&quot;, res = 300)
+png(file.path(outDir, &quot;supplementaryFigure.png&quot;), width = 7.5, height = 7.5, units = &quot;in&quot;, res = 300)
 drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE, labelCol = &quot;labelBoth&quot; )
 dev.off()</code></pre>
 <pre><code>## png 
@@ -1048,8 +1052,8 @@ print(compact_good, row.names = FALSE)</code></pre>
 ##     Condition:Age 0.70 [0.49, 0.98]      -2.03      0.042 1.19 [0.83, 1.71]       0.95      0.342
 ##           Sex:Age 0.69 [0.49, 0.96]      -2.16      0.031 0.86 [0.60, 1.22]      -0.85      0.395</code></pre>
 <pre class="r"><code># Write to CSV
-write.csv(compact_pun, &quot;OR_table_punishment.csv&quot;, row.names = FALSE)
-write.csv(compact_good, &quot;OR_table_reward.csv&quot;, row.names = FALSE)
+write.csv(compact_pun, file.path(outDir, &quot;OR_table_punishment.csv&quot;), row.names = FALSE)
+write.csv(compact_good, file.path(outDir, &quot;OR_table_reward.csv&quot;), row.names = FALSE)
 
 ######################## Spline model plot of public/private against age
 
@@ -1081,7 +1085,7 @@ gapTable &lt;- function( mod ) {
   out
 }
 
-png(&quot;figure3.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
+png(file.path(outDir, &quot;figure3.png&quot;), width = 5, height = 5, units = &quot;in&quot;, res = 300)
 
 # Create knot locations based on centered age
 knotLoc &lt;- quantile(d2$AgeCentred, probs=c(1/3, 2/3))
@@ -1301,7 +1305,7 @@ preddat2 &lt;- data.frame(
     Condition = rep(&quot;Public&quot;, 100),
     Cost = rep(&quot;N&quot;, 100)
 )
-png(&quot;figure4a.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
+png(file.path(outDir, &quot;figure4a.png&quot;), width = 5, height = 5, units = &quot;in&quot;, res = 300)
 plotTwoGreenRed(AntiGoodModCondAge, AntiGoodModCondAge, preddat1, preddat2)
 plotTwoPointsGreenRed(&#39;AntiGoodNum&#39;, &#39;AntiGoodNum&#39;,
     &#39;d2$Condition==&quot;Private&quot; &amp; d2$Cost == &quot;N&quot;&#39;, &#39;d2$Condition==&quot;Public&quot; &amp; d2$Cost == &quot;N&quot;&#39;)
@@ -1373,7 +1377,7 @@ preddat2 &lt;- data.frame(
     Age = seq(4, 10, length = 100),
     Sex = rep(&quot;M&quot;,100) 
 )
-png(&quot;figure4b.png&quot;, width = 5, height = 5, units = &quot;in&quot;, res = 300)
+png(file.path(outDir, &quot;figure4b.png&quot;), width = 5, height = 5, units = &quot;in&quot;, res = 300)
 plotTwoGreenRed(AntiGoodModSexAge,AntiGoodModSexAge,preddat1,preddat2)
 plotTwoPointsGreenRed(&#39;AntiGoodNum&#39;,&#39;AntiGoodNum&#39;,&#39;d2$Sex==&quot;F&quot;&#39;,&#39;d2$Sex==&quot;M&quot;&#39; )
 mtext(&quot;(b)&quot;,at=4,line=.5) 
