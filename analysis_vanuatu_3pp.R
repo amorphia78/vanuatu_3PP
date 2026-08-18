@@ -2,6 +2,10 @@
 # to the local directory where you have the data and R files.
 setwd_vanuatu_3pp()
 
+# Everything this script writes (figures and tables) goes in this subfolder.
+outDir <- "output"
+dir.create(outDir, showWarnings = FALSE)
+
 library(splines)
 library(sandwich)
 library(lmtest)
@@ -293,14 +297,14 @@ drawAllocFigure <- function( rows, showRaw, labelCol ) {
   }
 }
 
-png("figure2.png", width = 7, height = 7.5, units = "in", res = 300)
+png(file.path(outDir, "figure2.png"), width = 7, height = 7.5, units = "in", res = 300)
 drawAllocFigure( mainCells, showRaw = FALSE, labelCol = "label" )
 dev.off()
 
 # The supplementary version carries an extra cell, so it is drawn slightly
 # wider. The widest label line ("Anonymous,") is 0.72in, which at this width
 # leaves a 0.09in gap between neighbouring labels.
-png("supplementaryFigure.png", width = 7.5, height = 7.5, units = "in", res = 300)
+png(file.path(outDir, "supplementaryFigure.png"), width = 7.5, height = 7.5, units = "in", res = 300)
 drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE, labelCol = "labelBoth" )
 dev.off()
 
@@ -454,8 +458,8 @@ compact_good <- data.frame(
 print(compact_good, row.names = FALSE)
 
 # Write to CSV
-write.csv(compact_pun, "OR_table_punishment.csv", row.names = FALSE)
-write.csv(compact_good, "OR_table_reward.csv", row.names = FALSE)
+write.csv(compact_pun, file.path(outDir, "OR_table_punishment.csv"), row.names = FALSE)
+write.csv(compact_good, file.path(outDir, "OR_table_reward.csv"), row.names = FALSE)
 
 ######################## Spline model plot of public/private against age
 
@@ -487,7 +491,7 @@ gapTable <- function( mod ) {
   out
 }
 
-png("figure3.png", width = 5, height = 5, units = "in", res = 300)
+png(file.path(outDir, "figure3.png"), width = 5, height = 5, units = "in", res = 300)
 
 # Create knot locations based on centered age
 knotLoc <- quantile(d2$AgeCentred, probs=c(1/3, 2/3))
@@ -576,7 +580,7 @@ preddat2 <- data.frame(
     Condition = rep("Public", 100),
     Cost = rep("N", 100)
 )
-png("figure4a.png", width = 5, height = 5, units = "in", res = 300)
+png(file.path(outDir, "figure4a.png"), width = 5, height = 5, units = "in", res = 300)
 plotTwoGreenRed(AntiGoodModCondAge, AntiGoodModCondAge, preddat1, preddat2)
 plotTwoPointsGreenRed('AntiGoodNum', 'AntiGoodNum',
     'd2$Condition=="Private" & d2$Cost == "N"', 'd2$Condition=="Public" & d2$Cost == "N"')
@@ -606,7 +610,7 @@ preddat2 <- data.frame(
     Age = seq(4, 10, length = 100),
     Sex = rep("M",100) 
 )
-png("figure4b.png", width = 5, height = 5, units = "in", res = 300)
+png(file.path(outDir, "figure4b.png"), width = 5, height = 5, units = "in", res = 300)
 plotTwoGreenRed(AntiGoodModSexAge,AntiGoodModSexAge,preddat1,preddat2)
 plotTwoPointsGreenRed('AntiGoodNum','AntiGoodNum','d2$Sex=="F"','d2$Sex=="M"' )
 mtext("(b)",at=4,line=.5) 
