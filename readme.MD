@@ -3,6 +3,5 @@
 Data file: [data_vanuatu_3pp.tsv](data_vanuatu_3pp.tsv)  
 Analysis code: [analysis_vanuatu_3pp.R](analysis_vanuatu_3pp.R)  
 R Markdown showing results of code: [analysis_vanuatu_3pp.html](https://raw.githack.com/amorphia78/vanuatu_3PP/refs/heads/main/analysis_vanuatu_3pp.html)  
-Method full script: [procedure_details.pdf](procedure_details.pdf)  
 
-Note that [githack](https://raw.githack.com) is used to render R Markdown files directly following a click, so that analysis results are easily accessible. Should githack fail, obtain the HTML files using the usual method.
+Note that [githack](https://raw.githack.com) is used to render the R Markdown file directly following a click, so that analysis results are very easily accessible. Should githack fail, obtain and view the HTML file using the usual method.
