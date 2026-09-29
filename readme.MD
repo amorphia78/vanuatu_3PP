@@ -1,4 +1,4 @@
-# Data, code, and method details relevant for the academic manuscript "The development of third-party punishment and reward in ni-Vanuatu children: evidence of cost-benefit calculations"
+# Data and code for the academic manuscript "The development of third-party punishment and reward in ni-Vanuatu children"
 
 Data file: [data_vanuatu_3pp.tsv](data_vanuatu_3pp.tsv)  
 Analysis code: [analysis_vanuatu_3pp.R](analysis_vanuatu_3pp.R)  
