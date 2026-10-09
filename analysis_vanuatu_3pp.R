@@ -9,6 +9,7 @@ dir.create(outDir, showWarnings = FALSE)
 library(splines)
 library(sandwich)
 library(lmtest)
+library(lme4)
 
 d2 <- read.table("data_vanuatu_3pp.tsv", sep="\t", fill=T, head=T, na.strings="*")
 d2$AntiPun <- as.factor(ifelse(d2$AntiGot == "Bad", "Y", "N"))
@@ -24,6 +25,10 @@ d2$AntiGoodNum <- ifelse(d2$AntiGot == "Good", 1, 0)
 d2$NeutPunNum <- ifelse(d2$NeutGot == "Bad", 1, 0)
 d2$NeutEmptyNum <- ifelse(d2$NeutGot == "Empty", 1, 0)
 d2$NeutGoodNum <- ifelse(d2$NeutGot == "Good", 1, 0)
+
+# Center age variable
+meanAge <- mean(d2$Age)
+d2$AgeCentred <- d2$Age - meanAge
 
 behaviours <- c("AntiPun", "NeutPun", "AntiEmpty", "NeutEmpty", "AntiGood", "NeutGood")
 niceGreen <- "#009600FF"
@@ -101,8 +106,10 @@ tableAges <- data.frame(
   CostPub = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "Y" & ur$Condition == "Public" & floor(ur$Age)==x])),
   CostPri = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "Y" & ur$Condition == "Private" & floor(ur$Age)==x]))
 )
+tableAges <- as.matrix( tableAges[,-1] )
+dimnames(tableAges) <- list( Age = ages, colnames(tableAges) )
+tableAges <- addmargins( tableAges, FUN = list(Total = sum), quiet = TRUE )
 tableAges
-sum(tableAges[,2:5])
 length(d2[,1])
 
 table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))
@@ -113,10 +120,18 @@ table(cut(rur$Age, breaks = c(ages,11), right = FALSE, include.lowest = TRUE))
 # McNemar's exact test, i.e. an exact binomial test on the discordant participants. The
 # odds ratio compares the two marginal proportions, so its confidence interval uses
 # cluster-robust standard errors (sandwich::vcovCL) clustered on participant.
+# Long format: one row per participant per actor, carrying the participant's
+# design and demographic variables.
+punLong <- function(dat) {
+  nP <- nrow(dat)
+  data.frame( id = rep(seq_len(nP), 2), anti = rep(1:0, each = nP),
+              pun = c(dat$AntiPunNum, dat$NeutPunNum),
+              dat[ rep(seq_len(nP), 2), c("Condition","Cost","Sex","AgeCentred") ] )
+}
+
 punMcNemar <- function(dat) {
   nP <- nrow(dat)
-  long <- data.frame( id = rep(seq_len(nP), 2), anti = rep(1:0, each = nP),
-                      pun = c(dat$AntiPunNum, dat$NeutPunNum) )
+  long <- punLong(dat)
   mod <- glm( pun ~ anti, data = long, family = "binomial" )
   ci <- exp( coefci( mod, parm = "anti", vcov. = vcovCL, cluster = ~id ) )
   data.frame( n = nP,
@@ -149,6 +164,44 @@ punTabAge6Plus <- rbind( table(d2Age6Plus$NeutPun), table(d2Age6Plus$AntiPun) )
 punTabAge6Plus
 round( punTabAge6Plus[,2] / ( punTabAge6Plus[,1] + punTabAge6Plus[,2] ), 2 )
 punMcNemar(d2Age6Plus)
+
+########################################### Does selectivity increase with age?
+
+# The age bands above describe selectivity growing with age; this model tests
+# it. Selectivity is punishing the antisocial rather than the neutral actor.
+# Punishment of both actors is modelled together, and the actor x age
+# interaction tests whether the antisocial-vs-neutral odds ratio (as reported
+# for the age bands above) changes with age. Its OR is the factor by which that
+# selectivity OR multiplies per year. Actor also interacts with the other
+# Table 4 predictors, so that design-cell imbalance across age cannot
+# masquerade as an age effect.
+selLong <- punLong(d2)
+
+# Each participant contributes two responses, so a random intercept for
+# participant is fitted first. Its variance is estimated at zero (a singular
+# fit): a child's two responses are negatively associated (children punishing
+# one actor tend not to punish the other), which a random intercept cannot
+# represent. With zero variance the mixed model is identical to an ordinary
+# logistic regression, which is used for the test.
+selAgeMixed <- glmer( pun ~ anti * (Condition + Cost + Sex + AgeCentred) + (1|id),
+                      data = selLong, family = "binomial" )
+cat("\nRandom intercept for participant:\n")
+print( VarCorr(selAgeMixed) )
+cat( "Singular fit:", isSingular(selAgeMixed), "\n" )
+print( table( AntiPun = d2$AntiPun, NeutPun = d2$NeutPun ) )
+
+# Reported as in the OR tables: profile-likelihood CI, Wald z and p.
+selAgeMod <- glm( pun ~ anti * (Condition + Cost + Sex + AgeCentred),
+                  data = selLong, family = "binomial" )
+cat("\nPunishment, both actors: actor x age interaction\n")
+printCoefmat( summary(selAgeMod)$coefficients )
+selAgeCI <- exp( confint( selAgeMod, parm = "anti:AgeCentred" ) )
+selAgeWald <- coef(summary(selAgeMod))["anti:AgeCentred",]
+cat( "Change in selectivity OR per year of age: OR =",
+     round( exp( selAgeWald[["Estimate"]] ), 2 ),
+     "[95% CI:", round( selAgeCI[1], 2 ), ",", round( selAgeCI[2], 2 ), "],",
+     "Wald z =", round( selAgeWald[["z value"]], 2 ),
+     ", p =", round( selAgeWald[["Pr(>|z|)"]], 3 ), "\n" )
 
 ########################################### Allocation figure (Figure 2, and its supplementary version)
 
@@ -309,10 +362,6 @@ drawAllocFigure( 1:nrow(allocCells), showRaw = TRUE, labelCol = "labelBoth" )
 dev.off()
 
 ######################################### Makes main model table
-
-# Center age variable
-meanAge <- mean(d2$Age)
-d2$AgeCentred <- d2$Age - meanAge
 
 # Fit all models and store in lists
 mods <- list()
