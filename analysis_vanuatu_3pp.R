@@ -104,7 +104,8 @@ tableAges <- data.frame(
   FreePub = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "N" & ur$Condition == "Public" & floor(ur$Age)==x])),
   FreePri = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "N" & ur$Condition == "Private" & floor(ur$Age)==x])),
   CostPub = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "Y" & ur$Condition == "Public" & floor(ur$Age)==x])),
-  CostPri = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "Y" & ur$Condition == "Private" & floor(ur$Age)==x]))
+  CostPri = sapply(ages,function(x) length(ur$AntiPunNum[ ur$Cost == "Y" & ur$Condition == "Private" & floor(ur$Age)==x])),
+  Rural = sapply(ages,function(x) length(rur$AntiPunNum[ floor(rur$Age)==x]))
 )
 tableAges <- as.matrix( tableAges[,-1] )
 dimnames(tableAges) <- list( Age = ages, colnames(tableAges) )
